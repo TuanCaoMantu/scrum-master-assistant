@@ -101,7 +101,20 @@ Yêu cầu output:
 2. Highlight những điểm quan trọng
 3. Nếu có blockers: đánh giá mức độ ảnh hưởng và đề xuất action
 4. Nhận xét ngắn về team health hôm nay
-Trả lời bằng tiếng Việt, format markdown.
+Trả lời bằng tiếng Anh.
+QUAN TRỌNG: Không dùng ### headers. Chỉ dùng **bold** và xuống dòng thường.
+Format ví dụ:
+**📊 Daily Standup Summary**
+[nội dung...]
+
+**🎯 Highlight**
+- ...
+
+**🚧 Blockers**
+- ...
+
+**💚 Team Health**
+...
 """);
 
         return sb.ToString();

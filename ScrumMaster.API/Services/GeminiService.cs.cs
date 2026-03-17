@@ -26,6 +26,17 @@ public class GeminiService : IGeminiService
 
         var response = await _client.CompleteChatAsync([message], _requestOptions, cancellationToken: ct);
 
-        return response.Value.Content[0].Text;
+        var text = response.Value.Content[0].Text.Trim();
+
+        // Strip markdown code block wrapper
+        if (text.StartsWith("```markdown"))
+        text = text["```markdown".Length..].Trim();
+        else if (text.StartsWith("```"))
+        text = text[3..].Trim();
+
+        if (text.EndsWith("```"))
+        text = text[..^3].Trim();
+
+        return text;
     }
 }

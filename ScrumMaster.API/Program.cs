@@ -1,6 +1,5 @@
 using Azure;
 using Azure.AI.OpenAI;
-using OpenAI.Chat;
 using ScrumMaster.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,7 +13,8 @@ builder.Services.AddSingleton(provider =>
 {
     AzureOpenAIClient azureClient = new(
     endpoint,
-    new AzureKeyCredential("4lRRnE2RblBZlRDjNGzPe8wyiEh9uZRhmcS7vZlMzRWaEjDEipzWJQQJ99CCACqBBLyXJ3w3AAABACOGBvsg"));
+    new AzureKeyCredential(builder.Configuration["AZURE_OPENAI_KEY"] ?? throw new InvalidOperationException("AZURE_OPENAI_KEY is not configured"))
+    );
     return azureClient.GetChatClient(deploymentName);
 });
 

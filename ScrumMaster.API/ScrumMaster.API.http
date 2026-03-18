@@ -1,6 +1,32 @@
 @ScrumMaster.API_HostAddress = http://localhost:5104
 
-GET {{ScrumMaster.API_HostAddress}}/weatherforecast/
+### Submit a standup entry
+POST {{ScrumMaster.API_HostAddress}}/standup/submit
+Content-Type: application/json
+
+{
+  "memberName": "John Doe",
+  "yesterday": "Reviewed pull requests and fixed login bug",
+  "today": "Implement user profile API endpoint",
+  "blockers": ""
+}
+
+###
+
+### Get all submissions
+GET {{ScrumMaster.API_HostAddress}}/standup/submissions
+Accept: application/json
+
+###
+
+### Analyze standup submissions
+POST {{ScrumMaster.API_HostAddress}}/standup/analyze
+Accept: application/json
+
+###
+
+### Clear all submissions
+DELETE {{ScrumMaster.API_HostAddress}}/standup/submissions
 Accept: application/json
 
 ###

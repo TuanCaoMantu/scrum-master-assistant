@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using Microsoft.AspNetCore.Mvc;
 using ScrumMaster.API.Models;
 using ScrumMaster.API.Services;
@@ -10,60 +11,96 @@ namespace ScrumMaster.API.Controllers;
 [Route("standup")]
 public class StandupController(IGeminiService gemini) : ControllerBase
 {
+    private static readonly SemaphoreSlim SubmissionsLock = new(1, 1);
+
     private readonly IGeminiService _gemini = gemini;
 
     [HttpPost("analyze")]
     public async Task<ActionResult<StandupSummary>> Analyze(
         CancellationToken ct)
     {
-        var submissions = await ReadSubmissionsAsync(GetSubmissionsFilePath(), ct);
-        var prompt = BuildStandupPrompt(submissions);
-        var analysis = await _gemini.AnalyzeStandupAsync(prompt, ct);
+        var filePath = GetSubmissionsFilePath();
+        await SubmissionsLock.WaitAsync(ct);
+        try
+        {
+            var submissions = await ReadSubmissionsAsync(filePath, ct);
+            var prompt = BuildStandupPrompt(submissions);
+            var analysis = await _gemini.AnalyzeStandupAsync(prompt, ct);
 
-        var blockers = submissions
-        .Where(s => !string.IsNullOrWhiteSpace(s.Blockers) &&
-            !s.Blockers.Equals("none", StringComparison.CurrentCultureIgnoreCase) &&
-            !s.Blockers.Equals("không có", StringComparison.CurrentCultureIgnoreCase) &&
-            !s.Blockers.Equals("không", StringComparison.CurrentCultureIgnoreCase))
-        .Select(s => $"{s.MemberName}: {s.Blockers}")
-        .ToList();
+            var blockers = submissions
+            .Where(s => !string.IsNullOrWhiteSpace(s.Blockers) &&
+                !s.Blockers.Equals("none", StringComparison.CurrentCultureIgnoreCase) &&
+                !s.Blockers.Equals("không có", StringComparison.CurrentCultureIgnoreCase) &&
+                !s.Blockers.Equals("không", StringComparison.CurrentCultureIgnoreCase))
+            .Select(s => $"{s.MemberName}: {s.Blockers}")
+            .ToList();
 
-        return Ok(new StandupSummary(
-        Summary: analysis,
-        Blockers: blockers,
-        CreatedTasks: []
-        ));
+            return Ok(new StandupSummary(
+            Summary: analysis,
+            Blockers: blockers,
+            CreatedTasks: []
+            ));
+        }
+        finally
+        {
+            SubmissionsLock.Release();
+        }
     }
 
     [HttpPost("submit")]
     public async Task<ActionResult> Submit([FromBody] StandupSubmission submission)
     {
         var filePath = GetSubmissionsFilePath();
-        var submissions = await ReadSubmissionsAsync(filePath);
+        await SubmissionsLock.WaitAsync();
+        try
+        {
+            var submissions = await ReadSubmissionsAsync(filePath);
 
-        var normalizedMemberName = submission.MemberName?.Trim() ?? string.Empty;
-        submissions.RemoveAll(s =>
-            string.Equals(s.MemberName?.Trim(), normalizedMemberName, StringComparison.OrdinalIgnoreCase));
-        submissions.Add(submission);
+            var normalizedMemberName = submission.MemberName?.Trim() ?? string.Empty;
+            submissions.RemoveAll(s =>
+                string.Equals(s.MemberName?.Trim(), normalizedMemberName, StringComparison.OrdinalIgnoreCase));
+            submissions.Add(submission);
 
-        var updatedJson = JsonSerializer.Serialize(submissions, new JsonSerializerOptions { WriteIndented = true });
-        await System.IO.File.WriteAllTextAsync(filePath, updatedJson);
-        return Ok(new { Message = "Submission saved successfully" });
+            var updatedJson = JsonSerializer.Serialize(submissions, new JsonSerializerOptions { WriteIndented = true });
+            await System.IO.File.WriteAllTextAsync(filePath, updatedJson);
+            return Ok(new { Message = "Submission saved successfully" });
+        }
+        finally
+        {
+            SubmissionsLock.Release();
+        }
     }
 
     [HttpGet("submissions")]
     public async Task<ActionResult<List<StandupSubmission>>> GetSubmissions()
     {
-        var submissions = await ReadSubmissionsAsync(GetSubmissionsFilePath());
-        return Ok(submissions);
+        var filePath = GetSubmissionsFilePath();
+        await SubmissionsLock.WaitAsync();
+        try
+        {
+            var submissions = await ReadSubmissionsAsync(filePath);
+            return Ok(submissions);
+        }
+        finally
+        {
+            SubmissionsLock.Release();
+        }
     }
 
     [HttpDelete("submissions")]
     public async Task<ActionResult> ClearSubmissions(CancellationToken ct)
     {
         var filePath = GetSubmissionsFilePath();
-        await System.IO.File.WriteAllTextAsync(filePath, "[]", ct);
-        return Ok(new { Message = "All submissions cleared successfully" });
+        await SubmissionsLock.WaitAsync(ct);
+        try
+        {
+            await System.IO.File.WriteAllTextAsync(filePath, "[]", ct);
+            return Ok(new { Message = "All submissions cleared successfully" });
+        }
+        finally
+        {
+            SubmissionsLock.Release();
+        }
     }
 
     private static string GetSubmissionsFilePath()

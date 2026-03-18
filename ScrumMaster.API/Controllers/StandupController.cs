@@ -58,6 +58,14 @@ public class StandupController(IGeminiService gemini) : ControllerBase
         return Ok(submissions);
     }
 
+    [HttpDelete("submissions")]
+    public async Task<ActionResult> ClearSubmissions(CancellationToken ct)
+    {
+        var filePath = GetSubmissionsFilePath();
+        await System.IO.File.WriteAllTextAsync(filePath, "[]", ct);
+        return Ok(new { Message = "All submissions cleared successfully" });
+    }
+
     private static string GetSubmissionsFilePath()
     {
         return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "submissions.json");

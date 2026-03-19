@@ -20,7 +20,7 @@ public class GeminiService : IGeminiService
         };
     }
 
-    public async Task<string> AnalyzeStandupAsync(string prompt, CancellationToken ct = default)
+    public async Task<string> AnalyzeAsync(string prompt, CancellationToken ct = default)
     {
         var message = new UserChatMessage(prompt);
 

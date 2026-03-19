@@ -34,13 +34,18 @@ app.UseHttpsRedirection();
 app.MapControllers();
 
 // Apply migrations / create DB automatically in development only
-if (app.Environment.IsDevelopment())
+// if (app.Environment.IsDevelopment())
+// {
+//     using (var scope = app.Services.CreateScope())
+//     {
+//         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+//         db.Database.Migrate();
+//     }
+// }
+using (var scope = app.Services.CreateScope())
 {
-    using (var scope = app.Services.CreateScope())
-    {
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        db.Database.Migrate();
-    }
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
 }
 
 app.Run();

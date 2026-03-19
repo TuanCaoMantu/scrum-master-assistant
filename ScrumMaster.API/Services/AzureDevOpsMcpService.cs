@@ -8,15 +8,17 @@ public class AzureDevOpsMcpService : IAzureDevOpsMcpService, IAsyncDisposable
     private readonly ILogger<AzureDevOpsMcpService> _logger;
     private readonly string _org;
     private readonly string _domain;
+    private readonly string _mcpVersion;
     private IMcpClient? _client;
     private volatile bool _initialized;
     private readonly SemaphoreSlim _initLock = new(1, 1);
 
     public AzureDevOpsMcpService(ILogger<AzureDevOpsMcpService> logger)
     {
-        _logger = logger;
-        _org    = Environment.GetEnvironmentVariable("ADO_ORG") ?? "Mantu";
-        _domain = Environment.GetEnvironmentVariable("ADO_DOMAIN") ?? "dev.azure.com";
+        _logger     = logger;
+        _org        = Environment.GetEnvironmentVariable("ADO_ORG") ?? "Mantu";
+        _domain     = Environment.GetEnvironmentVariable("ADO_DOMAIN") ?? "dev.azure.com";
+        _mcpVersion = Environment.GetEnvironmentVariable("ADO_MCP_VERSION") ?? "1.0.0";
     }
 
     private async Task EnsureInitializedAsync(CancellationToken ct)
@@ -32,9 +34,9 @@ public class AzureDevOpsMcpService : IAzureDevOpsMcpService, IAsyncDisposable
 
             var transport = new StdioClientTransport(new StdioClientTransportOptions
             {
-                Name    = "azure-devops-mcp",
-                Command = "npx",
-                Arguments = ["-y", "@azure-devops/mcp@latest", _org, "-d", _domain]
+                Name      = "azure-devops-mcp",
+                Command   = "npx",
+                Arguments = ["-y", $"@azure-devops/mcp@{_mcpVersion}", _org, "-d", _domain]
             });
 
             _client = await McpClientFactory.CreateAsync(transport, cancellationToken: ct);

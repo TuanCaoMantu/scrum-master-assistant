@@ -23,6 +23,22 @@ public class BlockerController(
         [FromBody] CreateBlockerRequest req,
         CancellationToken ct)
     {
+        // Validate string lengths to match database constraints
+        if (req.Title != null && req.Title.Length > 500)
+        {
+            ModelState.AddModelError(nameof(req.Title), "Title cannot exceed 500 characters.");
+        }
+
+        if (req.Reporter != null && req.Reporter.Length > 100)
+        {
+            ModelState.AddModelError(nameof(req.Reporter), "Reporter cannot exceed 100 characters.");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
         var blocker = new Blocker
         {
             Title       = req.Title,

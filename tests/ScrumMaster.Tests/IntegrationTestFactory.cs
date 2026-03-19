@@ -12,6 +12,24 @@ namespace ScrumMaster.Tests;
 
 public class IntegrationTestFactory : WebApplicationFactory<Program>
 {
+    public sealed class ScopedDbContext : IDisposable
+    {
+        public IServiceScope Scope { get; }
+        public AppDbContext Context { get; }
+
+        public ScopedDbContext(IServiceScope scope, AppDbContext context)
+        {
+            Scope = scope;
+            Context = context;
+        }
+
+        public void Dispose()
+        {
+            Context.Dispose();
+            Scope.Dispose();
+        }
+    }
+
     // Keep an open in-memory SQLite connection alive for the factory's lifetime.
     // All EF Core scopes share this connection → data persists across requests.
     private readonly SqliteConnection _connection = new("Data Source=:memory:");
@@ -69,10 +87,11 @@ public class IntegrationTestFactory : WebApplicationFactory<Program>
     }
 
     /// <summary>Opens a scoped DbContext against the shared in-memory SQLite database.</summary>
-    public AppDbContext CreateDbContext()
+    public ScopedDbContext CreateDbContext()
     {
-        var scope = Services.CreateScope();
-        return scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var scope   = Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        return new ScopedDbContext(scope, context);
     }
 
     protected override void Dispose(bool disposing)

@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using ScrumMaster.API.Models;
 using ScrumMaster.API.Services;
+using System.ComponentModel.DataAnnotations;
 
 namespace ScrumMaster.API.Controllers;
 
@@ -22,10 +23,16 @@ public class SprintController(
 
     [HttpGet("analyze")]
     public async Task<ActionResult<SprintAnalysis>> Analyze(
-        [FromQuery] string project,
-        [FromQuery] string team,
+        [FromQuery][Required] string project,
+        [FromQuery][Required] string team,
         CancellationToken ct)
     {
+        if (string.IsNullOrWhiteSpace(project) || string.IsNullOrWhiteSpace(team))
+        {
+            logger.LogWarning("Analyze called with invalid project/team: '{Project}'/'{Team}'", project, team);
+            return BadRequest("Query parameters 'project' and 'team' are required and cannot be empty.");
+        }
+
         logger.LogInformation("Analyzing sprint for {Project}/{Team}", project, team);
 
         var sprintDataJson = await ado.GetCurrentSprintItemsAsync(project, team, ct);

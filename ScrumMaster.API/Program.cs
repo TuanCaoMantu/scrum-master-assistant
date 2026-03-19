@@ -33,11 +33,14 @@ app.UseHttpsRedirection();
 
 app.MapControllers();
 
-// Auto-create DB on startup
-using (var scope = app.Services.CreateScope())
+// Apply migrations / create DB automatically in development only
+if (app.Environment.IsDevelopment())
 {
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
+    using (var scope = app.Services.CreateScope())
+    {
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Database.Migrate();
+    }
 }
 
 app.Run();

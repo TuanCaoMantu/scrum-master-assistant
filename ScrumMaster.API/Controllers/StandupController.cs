@@ -2,6 +2,8 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using ScrumMaster.API.Data;
 using ScrumMaster.API.Models;
 using ScrumMaster.API.Services;
 
@@ -9,7 +11,7 @@ namespace ScrumMaster.API.Controllers;
 
 [ApiController]
 [Route("standup")]
-public class StandupController(IGeminiService gemini) : ControllerBase
+public class StandupController(IGeminiService gemini, AppDbContext db) : ControllerBase
 {
     private static readonly SemaphoreSlim SubmissionsLock = new(1, 1);
 
@@ -25,15 +27,52 @@ public class StandupController(IGeminiService gemini) : ControllerBase
         {
             var submissions = await ReadSubmissionsAsync(filePath, ct);
             var prompt = BuildStandupPrompt(submissions);
-            var analysis = await _gemini.AnalyzeStandupAsync(prompt, ct);
+            var analysis = await _gemini.AnalyzeAsync(prompt, ct);
 
-            var blockers = submissions
+            var blockerSubmissions = submissions
             .Where(s => !string.IsNullOrWhiteSpace(s.Blockers) &&
-                !s.Blockers.Equals("none", StringComparison.CurrentCultureIgnoreCase) &&
-                !s.Blockers.Equals("không có", StringComparison.CurrentCultureIgnoreCase) &&
-                !s.Blockers.Equals("không", StringComparison.CurrentCultureIgnoreCase))
-            .Select(s => $"{s.MemberName}: {s.Blockers}")
+                !s.Blockers.Equals("none", StringComparison.OrdinalIgnoreCase))
             .ToList();
+
+            // Auto-create blockers in DB — single batch existence check to avoid N+1
+            var today    = DateTime.UtcNow.Date;
+            var tomorrow = today.AddDays(1);
+            var existingTitles = (await db.Blockers
+                .Where(b => b.CreatedAt >= today && b.CreatedAt < tomorrow &&
+                            b.Status != BlockerStatus.Resolved)
+                .Select(b => b.Title)
+                .ToListAsync(ct))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var blockers = new List<string>();
+            foreach (var s in blockerSubmissions)
+            {
+                var title = $"{s.MemberName}: {s.Blockers}";
+                if (title.Length > 500) title = title[..500];
+                blockers.Add(title);
+
+                // Ensure reporter/assignee names respect DB max length constraints (e.g., 100 chars)
+                var reporterName = s.MemberName;
+                const int maxNameLength = 100;
+                if (!string.IsNullOrEmpty(reporterName) && reporterName.Length > maxNameLength)
+                {
+                    reporterName = reporterName[..maxNameLength];
+                }
+
+                if (!existingTitles.Contains(title))
+                {
+                    db.Blockers.Add(new Blocker
+                    {
+                        Title          = title,
+                        Description    = s.Blockers,
+                        Reporter       = reporterName,
+                        AssignedTo     = reporterName,
+                        CreatedAt      = DateTime.UtcNow,
+                        LastFollowUpAt = DateTime.UtcNow
+                    });
+                }
+            }
+            await db.SaveChangesAsync(ct);
 
             return Ok(new StandupSummary(
             Summary: analysis,
@@ -124,35 +163,35 @@ public class StandupController(IGeminiService gemini) : ControllerBase
     {
         var sb = new StringBuilder();
         sb.AppendLine($"""
-Bạn là Scrum Master AI cho team Marketplace.
-Hãy tổng hợp Daily Standup hôm nay thành một summary ngắn gọn, chuyên nghiệp.
+You are an AI Scrum Master for the Marketplace team.
+Summarize today's Daily Standup in a concise, professional manner.
 
-Dữ liệu standup:
+Standup data:
 """);
 
         foreach (var s in submissions)
         {
             sb.AppendLine($"""
 👤 {s.MemberName}:
-✅ Hôm qua: {s.Yesterday}
-🎯 Hôm nay: {s.Today}
-🚧 Blockers: {(string.IsNullOrWhiteSpace(s.Blockers) ? "Không có" : s.Blockers)}
+✅ Yesterday: {s.Yesterday}
+🎯 Today: {s.Today}
+🚧 Blockers: {(string.IsNullOrWhiteSpace(s.Blockers) ? "None" : s.Blockers)}
 """);
         }
 
         sb.AppendLine("""
-Yêu cầu output:
-1. Summary ngắn gọn (3-5 câu) về progress của team
-2. Highlight những điểm quan trọng
-3. Nếu có blockers: đánh giá mức độ ảnh hưởng và đề xuất action
-4. Nhận xét ngắn về team health hôm nay
-Trả lời bằng tiếng Anh.
-QUAN TRỌNG: Không dùng ### headers. Chỉ dùng **bold** và xuống dòng thường.
-Format ví dụ:
+Output requirements:
+1. Brief summary (3-5 sentences) of team progress
+2. Highlight key points
+3. If there are blockers: assess impact and suggest actions
+4. Short team health comment
+Respond in English.
+IMPORTANT: Do not use ### headers. Only use **bold** and line breaks.
+Example format:
 **📊 Daily Standup Summary**
-[nội dung...]
+[content...]
 
-**🎯 Highlight**
+**🎯 Highlights**
 - ...
 
 **🚧 Blockers**

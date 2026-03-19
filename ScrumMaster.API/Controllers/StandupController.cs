@@ -42,7 +42,7 @@ public class StandupController(IGeminiService gemini, AppDbContext db) : Control
                             b.Status != BlockerStatus.Resolved)
                 .Select(b => b.Title)
                 .ToListAsync(ct))
-                .ToHashSet(StringComparer.Ordinal);
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             var blockers = new List<string>();
             foreach (var s in blockerSubmissions)

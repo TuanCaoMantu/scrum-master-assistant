@@ -51,14 +51,22 @@ public class StandupController(IGeminiService gemini, AppDbContext db) : Control
                 if (title.Length > 500) title = title[..500];
                 blockers.Add(title);
 
+                // Ensure reporter/assignee names respect DB max length constraints (e.g., 100 chars)
+                var reporterName = s.MemberName;
+                const int maxNameLength = 100;
+                if (!string.IsNullOrEmpty(reporterName) && reporterName.Length > maxNameLength)
+                {
+                    reporterName = reporterName[..maxNameLength];
+                }
+
                 if (!existingTitles.Contains(title))
                 {
                     db.Blockers.Add(new Blocker
                     {
                         Title          = title,
                         Description    = s.Blockers,
-                        Reporter       = s.MemberName,
-                        AssignedTo     = s.MemberName,
+                        Reporter       = reporterName,
+                        AssignedTo     = reporterName,
                         CreatedAt      = DateTime.UtcNow,
                         LastFollowUpAt = DateTime.UtcNow
                     });

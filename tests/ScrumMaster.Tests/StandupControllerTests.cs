@@ -1,9 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
-using System.Text.Json;
-using Microsoft.Extensions.DependencyInjection;
 using Moq;
-using ScrumMaster.API.Data;
 using ScrumMaster.API.Models;
 
 namespace ScrumMaster.Tests;

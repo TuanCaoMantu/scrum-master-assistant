@@ -97,7 +97,7 @@ public class StandupControllerTests : IClassFixture<IntegrationTestFactory>, IAs
         Assert.Contains(summary.Blockers, b => b.Contains("DB is slow"));
 
         using var db = _factory.CreateDbContext();
-        var blocker = db.Blockers.FirstOrDefault(b => b.Description == "DB is slow");
+        var blocker = db.Context.Blockers.FirstOrDefault(b => b.Description == "DB is slow");
         Assert.NotNull(blocker);
         Assert.Equal(memberName, blocker.Reporter);
     }
@@ -117,7 +117,7 @@ public class StandupControllerTests : IClassFixture<IntegrationTestFactory>, IAs
         Assert.Empty(summary.Blockers);
 
         using var db = _factory.CreateDbContext();
-        Assert.False(db.Blockers.Any(b => b.Reporter == memberName));
+        Assert.False(db.Context.Blockers.Any(b => b.Reporter == memberName));
     }
 
     [Fact]
@@ -132,7 +132,7 @@ public class StandupControllerTests : IClassFixture<IntegrationTestFactory>, IAs
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         using var db = _factory.CreateDbContext();
-        Assert.False(db.Blockers.Any(b => b.Reporter == memberName));
+        Assert.False(db.Context.Blockers.Any(b => b.Reporter == memberName));
     }
 
     [Fact]
@@ -149,7 +149,7 @@ public class StandupControllerTests : IClassFixture<IntegrationTestFactory>, IAs
         await _client.PostAsync("/standup/analyze", null);
 
         using var db = _factory.CreateDbContext();
-        var count = db.Blockers.Count(b => b.Reporter == memberName && b.Description == "Server is down");
+        var count = db.Context.Blockers.Count(b => b.Reporter == memberName && b.Description == "Server is down");
         Assert.Equal(1, count);
     }
 }

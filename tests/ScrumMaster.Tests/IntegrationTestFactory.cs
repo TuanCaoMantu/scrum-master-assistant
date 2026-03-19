@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Moq;
 using ScrumMaster.API.Data;
 using ScrumMaster.API.Services;
@@ -84,6 +85,18 @@ public class IntegrationTestFactory : WebApplicationFactory<Program>
             if (adoDescriptor != null) services.Remove(adoDescriptor);
             services.AddSingleton(AdoMock.Object);
         });
+    }
+
+    protected override IHost CreateHost(IHostBuilder builder)
+    {
+        var host = base.CreateHost(builder);
+
+        // Program.cs only runs Migrate() in Development.
+        // Call EnsureCreated() here so the schema exists for every test run.
+        using var scope = host.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.EnsureCreated();
+
+        return host;
     }
 
     /// <summary>Opens a scoped DbContext against the shared in-memory SQLite database.</summary>

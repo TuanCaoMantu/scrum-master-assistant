@@ -202,8 +202,8 @@ public class BlockerControllerTests : IClassFixture<IntegrationTestFactory>
             LastFollowUpAt = DateTime.UtcNow.AddHours(-73),
             Status         = ScrumMaster.API.Models.BlockerStatus.Open
         };
-        db.Blockers.Add(oldBlocker);
-        await db.SaveChangesAsync();
+        db.Context.Blockers.Add(oldBlocker);
+        await db.Context.SaveChangesAsync();
 
         var response = await _client.GetAsync("/blockers/check");
 

@@ -1,32 +1,158 @@
-@ScrumMaster.API_HostAddress = http://localhost:5104
+@baseUrl = http://localhost:5104
 
-### Submit a standup entry
-POST {{ScrumMaster.API_HostAddress}}/standup/submit
+# =============================================================
+# FULL FLOW — AI Scrum Master
+# Run requests in order for the complete demo flow
+# =============================================================
+
+
+# -------------------------------------------------------------
+# PHASE 1 — DAILY STANDUP
+# -------------------------------------------------------------
+
+### [1/8] Clear previous submissions (fresh start)
+DELETE {{baseUrl}}/standup/submissions
+Accept: application/json
+
+###
+
+### [2/8] Tony submits standup — has a blocker
+POST {{baseUrl}}/standup/submit
 Content-Type: application/json
 
 {
-  "memberName": "John Doe",
-  "yesterday": "Reviewed pull requests and fixed login bug",
-  "today": "Implement user profile API endpoint",
+  "memberName": "Tony",
+  "yesterday": "Fixed login timeout bug, merged PR #42",
+  "today": "Review PR #45, write unit tests for payment module",
+  "blockers": "Waiting for vendor API key to test end-to-end payment flow"
+}
+
+###
+
+### [3/8] Nam submits standup — no blocker
+POST {{baseUrl}}/standup/submit
+Content-Type: application/json
+
+{
+  "memberName": "Nam",
+  "yesterday": "Completed UI design for dashboard",
+  "today": "Implement dashboard component",
   "blockers": ""
 }
 
 ###
 
-### Get all submissions
-GET {{ScrumMaster.API_HostAddress}}/standup/submissions
+### [4/8] Linh submits standup — no blocker
+POST {{baseUrl}}/standup/submit
+Content-Type: application/json
+
+{
+  "memberName": "Linh",
+  "yesterday": "Wrote API endpoint /orders",
+  "today": "Write unit tests for /orders endpoint",
+  "blockers": "none"
+}
+
+###
+
+### [5/8] Verify all 3 submissions saved
+GET {{baseUrl}}/standup/submissions
 Accept: application/json
 
 ###
 
-### Analyze standup submissions
-POST {{ScrumMaster.API_HostAddress}}/standup/analyze
+### [6/8] Analyze standup — AI summary + auto-create blocker from Tony
+# Expected: summary in English, blockers: ["Tony: Waiting for vendor API key..."]
+# A new Blocker record is auto-created in DB for Tony's blocker
+POST {{baseUrl}}/standup/analyze
 Accept: application/json
 
 ###
 
-### Clear all submissions
-DELETE {{ScrumMaster.API_HostAddress}}/standup/submissions
+
+# -------------------------------------------------------------
+# PHASE 2A — SPRINT MONITOR
+# Replace YOUR_PROJECT and YOUR_TEAM with actual ADO values
+# -------------------------------------------------------------
+
+### [7/8] List available MCP tools
+GET {{baseUrl}}/sprint/tools
+Accept: application/json
+
+###
+
+### [8/8] Analyze current sprint
+# Expected: sprintName, sprintHealth (On Track/At Risk/Off Track),
+#           progressPercent, warnings, AI summary in English
+GET {{baseUrl}}/sprint/analyze?project=Marketplace&team=Recruitement%20Activities
+Accept: application/json
+
+###
+
+
+# -------------------------------------------------------------
+# PHASE 2B — BLOCKER TRACKER
+# -------------------------------------------------------------
+
+### List open blockers (Tony's blocker should be here from step 6)
+GET {{baseUrl}}/blockers
+Accept: application/json
+
+###
+
+### Create a blocker manually
+POST {{baseUrl}}/blockers
+Content-Type: application/json
+
+{
+  "title": "Dev environment down — cannot deploy",
+  "description": "Azure DevOps pipeline fails at build step, infra team investigating",
+  "reporter": "Khoi",
+  "assignedTo": "Infra Team",
+  "sprintName": "Sprint 198"
+}
+
+###
+
+### Get blocker by ID (replace 1 with actual ID)
+GET {{baseUrl}}/blockers/1
+Accept: application/json
+
+###
+
+### Manual follow-up on blocker (replace 1 with actual ID)
+# After 2nd follow-up: status auto-escalates to "Escalated"
+POST {{baseUrl}}/blockers/1/followup
+Accept: application/json
+
+###
+
+### Auto check — follow-up + escalate + AI summary
+# Run this daily via Power Automate
+# Expected: totalOpen, followedUp[], escalated[], aiSummary in English
+GET {{baseUrl}}/blockers/check
+Accept: application/json
+
+###
+
+### Resolve a blocker (replace 1 with actual ID)
+POST {{baseUrl}}/blockers/1/resolve
+Content-Type: application/json
+
+{
+  "resolution": "Vendor provided API key on 19/03/2026. Payment flow tested and working."
+}
+
+###
+
+### Verify blocker resolved — should not appear in open list
+GET {{baseUrl}}/blockers
+Accept: application/json
+
+###
+
+### Get all including resolved
+GET {{baseUrl}}/blockers?includeResolved=true
 Accept: application/json
 
 ###

@@ -20,8 +20,9 @@ builder.Services.AddSingleton(provider =>
     return azureClient.GetChatClient(deploymentName);
 });
 
+builder.Services.AddHttpClient("ado");
 builder.Services.AddScoped<IGeminiService, GeminiService>();
-builder.Services.AddSingleton<IAzureDevOpsMcpService, AzureDevOpsMcpService>();
+builder.Services.AddSingleton<IAzureDevOpsMcpService, AzureDevOpsRestService>();
 
 // SQLite for Blocker Tracker
 builder.Services.AddDbContext<AppDbContext>(opt =>

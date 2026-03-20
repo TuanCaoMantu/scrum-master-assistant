@@ -1,4 +1,4 @@
-@baseUrl = https://ra-automation-api-e9hbeganegawfja0.southeastasia-01.azurewebsites.net
+@baseUrl = http://localhost:5104
 
 # =============================================================
 # FULL FLOW — AI Scrum Master

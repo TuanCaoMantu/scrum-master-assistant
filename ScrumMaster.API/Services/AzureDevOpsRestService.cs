@@ -42,12 +42,13 @@ public class AzureDevOpsRestService : IAzureDevOpsMcpService
         string project, string team, CancellationToken ct = default)
     {
         // Step 1: Get all iterations
-        var iterUrl = $"https://dev.azure.com/{_org}/{Uri.EscapeDataString(project)}" +
-                      $"/{Uri.EscapeDataString(team)}/_apis/work/teamsettings/iterations?api-version=7.1";
+        // Use UriBuilder to avoid double-encoding issues with team names containing spaces
+        var iterUrl = $"https://dev.azure.com/{_org}/{project}/{team}/_apis/work/teamsettings/iterations?api-version=7.1";
+        var iterUri = new Uri(iterUrl, UriKind.Absolute);
 
-        _logger.LogInformation("Fetching iterations from ADO: {Url}", iterUrl);
+        _logger.LogInformation("Fetching iterations from ADO: {Url}", iterUri);
 
-        var iterResp = await _http.GetAsync(iterUrl, ct);
+        var iterResp = await _http.GetAsync(iterUri, ct);
         iterResp.EnsureSuccessStatusCode();
 
         var iterJson = await iterResp.Content.ReadAsStringAsync(ct);
@@ -91,12 +92,12 @@ public class AzureDevOpsRestService : IAzureDevOpsMcpService
             return JsonSerializer.Serialize(new { sprintName = "No active sprint", sprintId = (string?)null, workItems = Array.Empty<object>() });
 
         // Step 2: Get work item IDs in sprint
-        var wiUrl = $"https://dev.azure.com/{_org}/{Uri.EscapeDataString(project)}" +
-                    $"/{Uri.EscapeDataString(team)}/_apis/work/teamsettings/iterations/{sprintId}/workitems?api-version=7.1";
+        var wiUrl = $"https://dev.azure.com/{_org}/{project}/{team}/_apis/work/teamsettings/iterations/{sprintId}/workitems?api-version=7.1";
+        var wiUri = new Uri(wiUrl, UriKind.Absolute);
 
-        _logger.LogInformation("Fetching sprint work items: {Url}", wiUrl);
+        _logger.LogInformation("Fetching sprint work items: {Url}", wiUri);
 
-        var wiResp = await _http.GetAsync(wiUrl, ct);
+        var wiResp = await _http.GetAsync(wiUri, ct);
         wiResp.EnsureSuccessStatusCode();
 
         var wiJson = await wiResp.Content.ReadAsStringAsync(ct);
@@ -116,7 +117,7 @@ public class AzureDevOpsRestService : IAzureDevOpsMcpService
 
         // Step 3: Batch fetch work item details
         var idsParam = string.Join(",", ids);
-        var detailUrl = $"https://dev.azure.com/{_org}/{Uri.EscapeDataString(project)}/_apis/wit/workitems" +
+        var detailUrl = $"https://dev.azure.com/{_org}/{project}/_apis/wit/workitems" +
                         $"?ids={idsParam}" +
                         $"&fields=System.Title,System.State,System.AssignedTo," +
                         $"Microsoft.VSTS.Scheduling.StoryPoints,System.WorkItemType" +

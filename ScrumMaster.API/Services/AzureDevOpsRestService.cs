@@ -42,14 +42,22 @@ public class AzureDevOpsRestService : IAzureDevOpsMcpService
         string project, string team, CancellationToken ct = default)
     {
         // Step 1: Get all iterations
-        // Use UriBuilder to avoid double-encoding issues with team names containing spaces
-        var iterUrl = $"https://dev.azure.com/{_org}/{project}/{team}/_apis/work/teamsettings/iterations?api-version=7.1";
-        var iterUri = new Uri(iterUrl, UriKind.Absolute);
+        // ADO requires spaces in team names to remain as-is (not %20).
+        // Use HttpRequestMessage with a pre-escaped Uri to bypass HttpClient re-encoding.
+        var iterUrl  = $"https://dev.azure.com/{_org}/{project}/{team}/_apis/work/teamsettings/iterations?api-version=7.1";
+        var iterUri  = new Uri(iterUrl.Replace(" ", "%20"));
 
-        _logger.LogInformation("Fetching iterations from ADO: {Url}", iterUri);
+        _logger.LogInformation("Fetching iterations from ADO: {Url}", iterUrl);
 
-        var iterResp = await _http.GetAsync(iterUri, ct);
-        iterResp.EnsureSuccessStatusCode();
+        using var iterReq  = new HttpRequestMessage(HttpMethod.Get, iterUri);
+        var iterResp = await _http.SendAsync(iterReq, ct);
+
+        if (!iterResp.IsSuccessStatusCode)
+        {
+            var body = await iterResp.Content.ReadAsStringAsync(ct);
+            _logger.LogError("ADO iterations request failed {Status}: {Body}", iterResp.StatusCode, body);
+            iterResp.EnsureSuccessStatusCode();
+        }
 
         var iterJson = await iterResp.Content.ReadAsStringAsync(ct);
         using var iterDoc = JsonDocument.Parse(iterJson);
@@ -92,12 +100,13 @@ public class AzureDevOpsRestService : IAzureDevOpsMcpService
             return JsonSerializer.Serialize(new { sprintName = "No active sprint", sprintId = (string?)null, workItems = Array.Empty<object>() });
 
         // Step 2: Get work item IDs in sprint
-        var wiUrl = $"https://dev.azure.com/{_org}/{project}/{team}/_apis/work/teamsettings/iterations/{sprintId}/workitems?api-version=7.1";
-        var wiUri = new Uri(wiUrl, UriKind.Absolute);
+        var wiUrl  = $"https://dev.azure.com/{_org}/{project}/{team}/_apis/work/teamsettings/iterations/{sprintId}/workitems?api-version=7.1";
+        var wiUri  = new Uri(wiUrl.Replace(" ", "%20"));
 
-        _logger.LogInformation("Fetching sprint work items: {Url}", wiUri);
+        _logger.LogInformation("Fetching sprint work items: {Url}", wiUrl);
 
-        var wiResp = await _http.GetAsync(wiUri, ct);
+        using var wiReq  = new HttpRequestMessage(HttpMethod.Get, wiUri);
+        var wiResp = await _http.SendAsync(wiReq, ct);
         wiResp.EnsureSuccessStatusCode();
 
         var wiJson = await wiResp.Content.ReadAsStringAsync(ct);

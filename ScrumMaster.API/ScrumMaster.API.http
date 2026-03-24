@@ -84,7 +84,7 @@ Accept: application/json
 ### [8/8] Analyze current sprint
 # Expected: sprintName, sprintHealth (On Track/At Risk/Off Track),
 #           progressPercent, warnings, AI summary in English
-GET {{baseUrl}}/sprint/analyze?project=Marketplace&team=Recruitement%20Activities
+GET {{baseUrl}}/sprint/analyze
 Accept: application/json
 
 ###

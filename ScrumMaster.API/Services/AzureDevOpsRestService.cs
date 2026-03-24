@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 
 namespace ScrumMaster.API.Services;
 
@@ -13,14 +14,21 @@ public class AzureDevOpsRestService : IAzureDevOpsMcpService
     private readonly string _org;
     private readonly ILogger<AzureDevOpsRestService> _logger;
 
-    public AzureDevOpsRestService(IHttpClientFactory factory, ILogger<AzureDevOpsRestService> logger)
+    public AzureDevOpsRestService(
+        IHttpClientFactory factory,
+        IConfiguration config,
+        ILogger<AzureDevOpsRestService> logger)
     {
         _logger = logger;
-        _org    = Environment.GetEnvironmentVariable("ADO_ORG")
-            ?? "Mantu"; // Default org for testing - replace with your org or set ADO_ORG env var
+        _org    = config["ADO_ORG"]
+               ?? Environment.GetEnvironmentVariable("ADO_ORG")
+               ?? "Mantu";
 
-        var pat     = Environment.GetEnvironmentVariable("ADO_PAT")
-            ?? throw new InvalidOperationException("ADO_PAT is not configured");
+        var pat = config["ADO_PAT"]
+               ?? Environment.GetEnvironmentVariable("ADO_PAT")
+               ?? throw new InvalidOperationException(
+                   "ADO_PAT is not configured. Add it to appsettings.Development.json or Azure App Service → Configuration.");
+
         var encoded = Convert.ToBase64String(Encoding.ASCII.GetBytes($":{pat}"));
 
         _http = factory.CreateClient("ado");
@@ -38,19 +46,49 @@ public class AzureDevOpsRestService : IAzureDevOpsMcpService
     public Task<string> CallToolAsync(string toolName, Dictionary<string, object?> arguments, CancellationToken ct = default)
         => throw new NotSupportedException("CallToolAsync is not supported in REST mode. Use GetCurrentSprintItemsAsync directly.");
 
-    public async Task<string> GetCurrentSprintItemsAsync(
-        string project, string team, CancellationToken ct = default)
+    /// Resolve team name → team ID (GUID) to avoid name-based lookup issues
+    private async Task<string> ResolveTeamIdAsync(string project, string teamName, CancellationToken ct)
     {
-        // Step 1: Get all iterations
-        // ADO requires spaces in team names to remain as-is (not %20).
-        // Use HttpRequestMessage with a pre-escaped Uri to bypass HttpClient re-encoding.
-        var iterUrl  = $"https://dev.azure.com/{_org}/{project}/{team}/_apis/work/teamsettings/iterations?api-version=7.1";
-        var iterUri  = new Uri(iterUrl.Replace(" ", "%20"));
+        var url = $"https://dev.azure.com/{_org}/_apis/projects/{Uri.EscapeDataString(project)}/teams?api-version=7.1";
+        _logger.LogInformation("Resolving team ID for '{Team}' in project '{Project}'", teamName, project);
+
+        var resp = await _http.GetAsync(url, ct);
+        resp.EnsureSuccessStatusCode();
+
+        var json = await resp.Content.ReadAsStringAsync(ct);
+        using var doc = JsonDocument.Parse(json);
+
+        var allTeams = new List<string>();
+        foreach (var t in doc.RootElement.GetProperty("value").EnumerateArray())
+        {
+            var name = t.TryGetProperty("name", out var n) ? n.GetString() : null;
+            if (name != null) allTeams.Add(name);
+
+            if (string.Equals(name, teamName, StringComparison.OrdinalIgnoreCase))
+            {
+                var id = t.GetProperty("id").GetString()!;
+                _logger.LogInformation("Resolved team '{Team}' → ID {Id}", teamName, id);
+                return id;
+            }
+        }
+
+        _logger.LogWarning("Team '{Team}' not found. Available teams: [{Teams}]",
+            teamName, string.Join(", ", allTeams));
+        return teamName; // fallback
+    }
+
+    public async Task<string> GetCurrentSprintItemsAsync(
+        string project = "Marketplace", string team = "Recruitment Activities", CancellationToken ct = default)
+    {
+        // Step 0: Resolve team name → team ID
+        var teamId = await ResolveTeamIdAsync(project, team, ct);
+
+        // Step 1: Get all iterations using team ID
+        var iterUrl = $"https://dev.azure.com/{_org}/{Uri.EscapeDataString(project)}/{teamId}/_apis/work/teamsettings/iterations?api-version=7.1";
 
         _logger.LogInformation("Fetching iterations from ADO: {Url}", iterUrl);
 
-        using var iterReq  = new HttpRequestMessage(HttpMethod.Get, iterUri);
-        var iterResp = await _http.SendAsync(iterReq, ct);
+        var iterResp = await _http.GetAsync(iterUrl, ct);
 
         if (!iterResp.IsSuccessStatusCode)
         {
@@ -100,13 +138,11 @@ public class AzureDevOpsRestService : IAzureDevOpsMcpService
             return JsonSerializer.Serialize(new { sprintName = "No active sprint", sprintId = (string?)null, workItems = Array.Empty<object>() });
 
         // Step 2: Get work item IDs in sprint
-        var wiUrl  = $"https://dev.azure.com/{_org}/{project}/{team}/_apis/work/teamsettings/iterations/{sprintId}/workitems?api-version=7.1";
-        var wiUri  = new Uri(wiUrl.Replace(" ", "%20"));
+        var wiUrl  = $"https://dev.azure.com/{_org}/{Uri.EscapeDataString(project)}/{teamId}/_apis/work/teamsettings/iterations/{sprintId}/workitems?api-version=7.1";
 
         _logger.LogInformation("Fetching sprint work items: {Url}", wiUrl);
 
-        using var wiReq  = new HttpRequestMessage(HttpMethod.Get, wiUri);
-        var wiResp = await _http.SendAsync(wiReq, ct);
+        var wiResp = await _http.GetAsync(wiUrl, ct);
         wiResp.EnsureSuccessStatusCode();
 
         var wiJson = await wiResp.Content.ReadAsStringAsync(ct);

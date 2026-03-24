@@ -22,20 +22,9 @@ public class SprintController(
     }
 
     [HttpGet("analyze")]
-    public async Task<ActionResult<SprintAnalysis>> Analyze(
-        [FromQuery][Required] string project,
-        [FromQuery][Required] string team,
-        CancellationToken ct)
+    public async Task<ActionResult<SprintAnalysis>> Analyze(CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(project) || string.IsNullOrWhiteSpace(team))
-        {
-            logger.LogWarning("Analyze called with invalid project/team: '{Project}'/'{Team}'", project, team);
-            return BadRequest("Query parameters 'project' and 'team' are required and cannot be empty.");
-        }
-
-        logger.LogInformation("Analyzing sprint for {Project}/{Team}", project, team);
-
-        var sprintDataJson = await ado.GetCurrentSprintItemsAsync(project, team, ct);
+        var sprintDataJson = await ado.GetCurrentSprintItemsAsync(ct: ct);
         using var sprintDoc = JsonDocument.Parse(sprintDataJson);
         var sprintData      = sprintDoc.RootElement;
         var sprintName      = sprintData.GetProperty("sprintName").GetString() ?? "Unknown Sprint";
@@ -68,7 +57,7 @@ public class SprintController(
                    : "Off Track";
 
         // Build prompt cho AI
-        var prompt = BuildSprintPrompt(sprintName, team, workItems, progressPct, donePoints, totalPoints);
+        var prompt = BuildSprintPrompt(workItems, progressPct, donePoints, totalPoints, sprintName);
         var analysis = await ai.AnalyzeAsync(prompt, ct);
 
         return Ok(new SprintAnalysis(
@@ -121,9 +110,9 @@ public class SprintController(
     }
 
     private static string BuildSprintPrompt(
-        string sprintName, string team,
         List<WorkItemSummary> items,
-        double progressPct, double donePts, double totalPts)
+        double progressPct, double donePts, double totalPts,
+        string sprintName, string team = "Recruitement Activities")
     {
         var sb = new StringBuilder();
         sb.AppendLine($"""

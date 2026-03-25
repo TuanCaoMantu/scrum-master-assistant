@@ -23,6 +23,7 @@ builder.Services.AddSingleton(provider =>
 builder.Services.AddHttpClient("ado");
 builder.Services.AddScoped<IGeminiService, GeminiService>();
 builder.Services.AddSingleton<IAzureDevOpsMcpService, AzureDevOpsRestService>();
+builder.Services.AddScoped<IApplicationInsightsService, ApplicationInsightsService>();
 
 // SQLite for Blocker Tracker
 builder.Services.AddDbContext<AppDbContext>(opt =>

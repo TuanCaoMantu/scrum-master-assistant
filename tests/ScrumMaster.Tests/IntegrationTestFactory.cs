@@ -35,8 +35,9 @@ public class IntegrationTestFactory : WebApplicationFactory<Program>
     // All EF Core scopes share this connection → data persists across requests.
     private readonly SqliteConnection _connection = new("Data Source=:memory:");
 
-    public Mock<IGeminiService>         GeminiMock { get; } = new();
-    public Mock<IAzureDevOpsMcpService> AdoMock    { get; } = new();
+    public Mock<IGeminiService>              GeminiMock      { get; } = new();
+    public Mock<IAzureDevOpsMcpService>      AdoMock         { get; } = new();
+    public Mock<IApplicationInsightsService> AppInsightsMock { get; } = new();
 
     public IntegrationTestFactory()
     {
@@ -59,7 +60,8 @@ public class IntegrationTestFactory : WebApplicationFactory<Program>
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["AZURE_OPENAI_KEY"] = "fake-key-for-testing"
+                ["AZURE_OPENAI_KEY"]          = "fake-key-for-testing",
+                ["APPINSIGHTS_WORKSPACE_ID"]  = "fake-workspace-id"
             });
         });
 
@@ -84,6 +86,12 @@ public class IntegrationTestFactory : WebApplicationFactory<Program>
                 d => d.ServiceType == typeof(IAzureDevOpsMcpService));
             if (adoDescriptor != null) services.Remove(adoDescriptor);
             services.AddSingleton(AdoMock.Object);
+
+            // Replace IApplicationInsightsService with mock
+            var appInsightsDescriptor = services.SingleOrDefault(
+                d => d.ServiceType == typeof(IApplicationInsightsService));
+            if (appInsightsDescriptor != null) services.Remove(appInsightsDescriptor);
+            services.AddSingleton(AppInsightsMock.Object);
         });
     }
 

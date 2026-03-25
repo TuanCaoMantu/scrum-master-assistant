@@ -12,9 +12,9 @@ public class InsightController(
     IApplicationInsightsService appInsights,
     ILogger<InsightController> logger) : ControllerBase
 {
-    private const string SubscriptionId   = "9b66da88-8ca2-491f-8b05-411f59b60aac";
+    private const string SubscriptionId   = "3e45e1dd-7bc1-4750-85fc-1827620be83a";
     private const string ResourceGroup    = "rg-erp";
-    private const string AppInsightsName  = "appi-marketplace-qa";
+    private const string AppInsightsName  = "appi-marketplace-prod";
 
     // GET /insight/report?timeRange=24h&roles=Candidate.API,Need.Api
     [HttpGet("report")]

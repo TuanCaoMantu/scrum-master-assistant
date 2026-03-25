@@ -21,7 +21,6 @@ public class ApplicationInsightsService : IApplicationInsightsService
     {
         _logger = logger;
         _workspaceId = config["APPINSIGHTS_WORKSPACE_ID"]
-                    ?? Environment.GetEnvironmentVariable("APPINSIGHTS_WORKSPACE_ID")
                     ?? throw new InvalidOperationException(
                         "APPINSIGHTS_WORKSPACE_ID is not configured.");
 
@@ -32,18 +31,18 @@ public class ApplicationInsightsService : IApplicationInsightsService
         string timespan, List<string> roles, CancellationToken ct = default)
     {
         var roleFilter = BuildRoleFilter(roles);
-        var ago = ToAgo(timespan);
+        var ago = ValidateAgo(timespan);
         var query = $"""
         let LatestFailed =
         AppRequests
         | where TimeGenerated > ago({ago})
-        {BuildRoleFilter(roles)}
+        {roleFilter}
         | where Success == false
         | summarize arg_max(TimeGenerated, OperationId, _ItemId) by Name
         | project Name, LatestOperationId = OperationId, EventId = _ItemId, LatestFailedTime = TimeGenerated;
         AppRequests
         | where TimeGenerated > ago({ago})
-        {BuildRoleFilter(roles)}
+        {roleFilter}
         | summarize
             Count       = count(),
             CountFailed = countif(Success == false),
@@ -71,18 +70,18 @@ public class ApplicationInsightsService : IApplicationInsightsService
         string timespan, List<string> roles, CancellationToken ct = default)
     {
         var roleFilter = BuildRoleFilter(roles);
-        var ago = ToAgo(timespan);
+        var ago = ValidateAgo(timespan);
         var query = $"""
         let LatestFailed =
             AppDependencies
             | where TimeGenerated > ago({ago})
-            {BuildRoleFilter(roles)}
+            {roleFilter}
             | where Success == false
             | summarize arg_max(TimeGenerated, OperationId, _ItemId) by Name, DependencyType
             | project Name, DependencyType, LatestOperationId = OperationId, EventId = _ItemId, LatestFailedTime = TimeGenerated;
         AppDependencies
         | where TimeGenerated > ago({ago})
-        {BuildRoleFilter(roles)}
+        {roleFilter}
         | summarize
             Count       = count(),
             CountFailed = countif(Success == false),
@@ -108,17 +107,17 @@ public class ApplicationInsightsService : IApplicationInsightsService
         string timespan, List<string> roles, CancellationToken ct = default)
     {
         var roleFilter = BuildRoleFilter(roles);
-        var ago = ToAgo(timespan);
+        var ago = ValidateAgo(timespan);
         var query = $"""
         let LatestFailed =
             AppExceptions
             | where TimeGenerated > ago({ago})
-            {BuildRoleFilter(roles)}
+            {roleFilter}
             | summarize arg_max(TimeGenerated, OperationId, _ItemId) by ExceptionType, OuterMessage, ProblemId
             | project ExceptionType, OuterMessage, ProblemId, LatestOperationId = OperationId, EventId = _ItemId, LatestFailedTime = TimeGenerated;
         AppExceptions
         | where TimeGenerated > ago({ago})
-        {BuildRoleFilter(roles)}
+        {roleFilter}
         | summarize
             Count         = count(),
             AffectedUsers = dcount(UserId)
@@ -129,9 +128,9 @@ public class ApplicationInsightsService : IApplicationInsightsService
 
         var rows = await ExecuteQueryAsync(query, timespan, ct);
         return rows.ConvertAll(r => new RawException(
-            ExceptionType: GetStr(r, "type"),
-            OuterMessage: GetStr(r, "outerMessage"),
-            ProblemId: GetStr(r, "problemId"),
+            ExceptionType: GetStr(r, "ExceptionType"),
+            OuterMessage: GetStr(r, "OuterMessage"),
+            ProblemId: GetStr(r, "ProblemId"),
             Count: GetInt(r, "Count"),
             AffectedUsers: GetInt(r, "AffectedUsers"),
             EventId: GetStr(r, "EventId"),
@@ -175,20 +174,11 @@ public class ApplicationInsightsService : IApplicationInsightsService
         "30d" => TimeSpan.FromDays(30),
         _ => TimeSpan.FromHours(24)
     };
-    /// Convert timespan string to KQL ago() argument e.g. "24h" → "24h", "3d" → "3d"
-    private static string ToAgo(string timespan) => timespan switch
-    {
-        "30m" => "30m",
-        "1h" => "1h",
-        "4h" => "4h",
-        "6h" => "6h",
-        "12h" => "12h",
-        "24h" => "24h",
-        "3d" => "3d",
-        "7d" => "7d",
-        "30d" => "30d",
-        _ => "24h"
-    };
+
+    // Valid KQL ago() args match accepted timespan strings; default to "24h" for unknown values.
+    private static string ValidateAgo(string timespan) =>
+        timespan is "30m" or "1h" or "4h" or "6h" or "12h" or "24h" or "3d" or "7d" or "30d"
+            ? timespan : "24h";
 
     private static string BuildRoleFilter(List<string> roles)
     {

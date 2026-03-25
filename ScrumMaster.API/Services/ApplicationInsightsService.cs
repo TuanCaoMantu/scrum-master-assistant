@@ -36,7 +36,7 @@ public class ApplicationInsightsService : IApplicationInsightsService
         var query = $"""
         let LatestFailed =
         AppRequests
-        | where TimeGenerated > ago(24h)
+        | where TimeGenerated > ago({ago})
         {BuildRoleFilter(roles)}
         | where Success == false
         | summarize arg_max(TimeGenerated, OperationId, _ItemId) by Name
@@ -52,7 +52,7 @@ public class ApplicationInsightsService : IApplicationInsightsService
         | extend FailPct = round(todouble(CountFailed) / Count * 100, 1)
         | join kind=leftouter LatestFailed on Name
         | project-away Name1
-        | order by CountFailed desc
+        | order by CountFailed desc;
         """;
 
         var rows = await ExecuteQueryAsync(query, timespan, ct);
@@ -73,6 +73,13 @@ public class ApplicationInsightsService : IApplicationInsightsService
         var roleFilter = BuildRoleFilter(roles);
         var ago = ToAgo(timespan);
         var query = $"""
+        let LatestFailed =
+            AppDependencies
+            | where TimeGenerated > ago({ago})
+            {BuildRoleFilter(roles)}
+            | where Success == false
+            | summarize arg_max(TimeGenerated, OperationId, _ItemId) by Name, DependencyType
+            | project Name, DependencyType, LatestOperationId = OperationId, EventId = _ItemId, LatestFailedTime = TimeGenerated;
         AppDependencies
         | where TimeGenerated > ago({ago})
         {BuildRoleFilter(roles)}
@@ -81,8 +88,8 @@ public class ApplicationInsightsService : IApplicationInsightsService
             CountFailed = countif(Success == false),
             AvgDuration = round(avg(DurationMs), 0)
         by Name, DependencyType
-        | order by CountFailed desc
-        | take 50
+        | join kind=leftouter LatestFailed on Name, DependencyType
+        | order by CountFailed desc;
         """;
 
         var rows = await ExecuteQueryAsync(query, timespan, ct);
@@ -91,7 +98,9 @@ public class ApplicationInsightsService : IApplicationInsightsService
             DependencyType: GetStr(r, "DependencyType"),
             TotalCount: GetInt(r, "Count"),
             FailedCount: GetInt(r, "CountFailed"),
-            AvgDurationMs: GetDouble(r, "AvgDuration")
+            AvgDurationMs: GetDouble(r, "AvgDuration"),
+            EventId: GetStr(r, "EventId"),
+            LastFailedTime: GetStr(r, "LatestFailedTime")
         ));
     }
 
@@ -101,6 +110,12 @@ public class ApplicationInsightsService : IApplicationInsightsService
         var roleFilter = BuildRoleFilter(roles);
         var ago = ToAgo(timespan);
         var query = $"""
+        let LatestFailed =
+            AppExceptions
+            | where TimeGenerated > ago({ago})
+            {BuildRoleFilter(roles)}
+            | summarize arg_max(TimeGenerated, OperationId, _ItemId) by ExceptionType, OuterMessage, ProblemId
+            | project ExceptionType, OuterMessage, ProblemId, LatestOperationId = OperationId, EventId = _ItemId, LatestFailedTime = TimeGenerated;
         AppExceptions
         | where TimeGenerated > ago({ago})
         {BuildRoleFilter(roles)}
@@ -108,8 +123,8 @@ public class ApplicationInsightsService : IApplicationInsightsService
             Count         = count(),
             AffectedUsers = dcount(UserId)
         by ExceptionType, OuterMessage, ProblemId
-        | order by Count desc
-        | take 50
+        | join kind=leftouter LatestFailed on ExceptionType, OuterMessage, ProblemId
+        | order by Count desc;
         """;
 
         var rows = await ExecuteQueryAsync(query, timespan, ct);
@@ -118,7 +133,9 @@ public class ApplicationInsightsService : IApplicationInsightsService
             OuterMessage: GetStr(r, "outerMessage"),
             ProblemId: GetStr(r, "problemId"),
             Count: GetInt(r, "Count"),
-            AffectedUsers: GetInt(r, "AffectedUsers")
+            AffectedUsers: GetInt(r, "AffectedUsers"),
+            EventId: GetStr(r, "EventId"),
+            LastFailedTime: GetStr(r, "LatestFailedTime")
         ));
     }
 
@@ -221,8 +238,8 @@ public class ApplicationInsightsService : IApplicationInsightsService
 
 // ── Raw DTOs ──────────────────────────────────────────────────────────────────
 public record RawFailedRequest(string Operation, int TotalCount, int FailedCount, double FailPct, string EventId, int Users, string LastFailedTime);
-public record RawFailedDependency(string Name, string DependencyType, int TotalCount, int FailedCount, double AvgDurationMs);
-public record RawException(string ExceptionType, string OuterMessage, string ProblemId, int Count, int AffectedUsers);
+public record RawFailedDependency(string Name, string DependencyType, int TotalCount, int FailedCount, double AvgDurationMs, string EventId, string LastFailedTime);
+public record RawException(string ExceptionType, string OuterMessage, string ProblemId, int Count, int AffectedUsers, string EventId, string LastFailedTime);
 
 public enum ReportType
 {

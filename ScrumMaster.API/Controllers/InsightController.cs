@@ -35,26 +35,36 @@ public class InsightController(
         {
             case ReportType.FailedRequests:
                 var failedRequests = await SafeFetch(() => appInsights.GetFailedRequestsAsync(timeRange, roleList, ct), "failed requests");
-                // var enrichedRequests = await EnrichRequestsAsync(failedRequests, ct);
-                var result = failedRequests.Where(r => !string.IsNullOrEmpty(r.EventId)).Select(r => new FailedRequestItem(
+                return Ok(failedRequests.Where(r => !string.IsNullOrEmpty(r.EventId)).Select(r => new FailedRequestItem(
                     Operation: r.Operation,
                     TotalCount: r.TotalCount,
                     FailedCount: r.FailedCount,
                     FailPct: r.FailPct,
                     Users: r.Users,
                     RootCause: BuildTransactionUrl("9b66da88-8ca2-491f-8b05-411f59b60aac", "rg-erp", "appi-marketplace-qa", r.EventId, DateTime.Parse(r.LastFailedTime))
-                )).ToList();
-                return Ok(result);
+                )));
 
             case ReportType.FailedDependencies:
                 var failedDependencies = await SafeFetch(() => appInsights.GetFailedDependenciesAsync(timeRange, roleList, ct), "failed dependencies");
-                var enrichedDependencies = await EnrichDependenciesAsync(failedDependencies, ct);
-                return Ok(enrichedDependencies);
+                return Ok(failedDependencies.Where(r => !string.IsNullOrEmpty(r.EventId)).Select(r => new FailedDependencyItem(
+                    Name: r.Name,
+                    DependencyType: r.DependencyType,
+                    TotalCount: r.TotalCount,
+                    FailedCount: r.FailedCount,
+                    AvgDurationMs: r.AvgDurationMs,
+                    RootCause: BuildTransactionUrl("9b66da88-8ca2-491f-8b05-411f59b60aac", "rg-erp", "appi-marketplace-qa", r.EventId, DateTime.Parse(r.LastFailedTime))
+                )));
 
             case ReportType.Exceptions:
                 var exceptions = await SafeFetch(() => appInsights.GetExceptionsAsync(timeRange, roleList, ct), "exceptions");
-                var enrichedExceptions = await EnrichExceptionsAsync(exceptions, ct);
-                return Ok(enrichedExceptions);
+                return Ok(exceptions.Where(r => !string.IsNullOrEmpty(r.EventId)).Select(r => new ExceptionItem(
+                    ExceptionType: r.ExceptionType,
+                    OuterMessage: r.OuterMessage,
+                    ProblemId: r.ProblemId,
+                    Count: r.Count,
+                    AffectedUsers: r.AffectedUsers,
+                    RootCause: BuildTransactionUrl("9b66da88-8ca2-491f-8b05-411f59b60aac", "rg-erp", "appi-marketplace-qa", r.EventId, DateTime.Parse(r.LastFailedTime))
+                )));
 
             default:
                 return BadRequest("Invalid report type.");

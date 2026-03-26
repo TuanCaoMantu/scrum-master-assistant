@@ -146,6 +146,13 @@ public class ApplicationInsightsService : IApplicationInsightsService
         var ago = ValidateAgo(timespan);
         var typeFilter = type.HasValue ? $"| where Type == \"{type.Value}\"" : "| where Type in (\"AppRequests\", \"AppDependencies\", \"AppExceptions\")";
         var query = $"""
+        let Stats =
+            union AppRequests, AppDependencies, AppExceptions
+            | where TimeGenerated > ago({ago})
+            {roleFilter}
+            | where Success == false
+            {typeFilter}
+            | summarize Count = count(), AffectedUsers = dcount(UserId) by Name, Type;
         union AppRequests, AppDependencies, AppExceptions
         | where TimeGenerated > ago({ago})
         {roleFilter}
@@ -164,6 +171,8 @@ public class ApplicationInsightsService : IApplicationInsightsService
             UserId,
             UserAuthenticatedId,
             ItemId = tostring(_ItemId)
+        | join kind=leftouter Stats on Name, Type
+        | project-away Name1, Type1
         | order by TimeGenerated desc
         | take {take}
         """;
@@ -181,7 +190,9 @@ public class ApplicationInsightsService : IApplicationInsightsService
             OperationId:         GetStr(r, "OperationId"),
             UserId:              GetStr(r, "UserId"),
             UserAuthenticatedId: GetStr(r, "UserAuthenticatedId"),
-            ItemId:              GetStr(r, "ItemId")
+            ItemId:              GetStr(r, "ItemId"),
+            Count:               GetInt(r, "Count"),
+            AffectedUsers:       GetInt(r, "AffectedUsers")
         ));
     }
 
@@ -277,7 +288,7 @@ public class ApplicationInsightsService : IApplicationInsightsService
 public record RawFailedRequest(string Operation, int TotalCount, int FailedCount, double FailPct, string EventId, int Users, string LastFailedTime);
 public record RawFailedDependency(string Name, string DependencyType, int TotalCount, int FailedCount, double AvgDurationMs, string EventId, string LastFailedTime);
 public record RawException(string ExceptionType, string OuterMessage, string ProblemId, int Count, int AffectedUsers, string EventId, string LastFailedTime);
-public record RawHealthCheckItem(string Id, string TimeGenerated, string AppRoleName, string ResourceId, string Type, string Name, string ResultCode, string OperationName, string OperationId, string UserId, string UserAuthenticatedId, string ItemId);
+public record RawHealthCheckItem(string Id, string TimeGenerated, string AppRoleName, string ResourceId, string Type, string Name, string ResultCode, string OperationName, string OperationId, string UserId, string UserAuthenticatedId, string ItemId, int Count, int AffectedUsers);
 
 public enum ReportType
 {

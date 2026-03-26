@@ -216,8 +216,8 @@ public class InsightControllerTests : IClassFixture<IntegrationTestFactory>
         _factory.AppInsightsMock
             .Setup(s => s.GetHealthCheckAsync(It.IsAny<string>(), It.IsAny<List<string>>(), null, It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([
-                new RawHealthCheckItem("id-1", "2024-01-01T00:00:00Z", "Candidate.API", "/subscriptions/abc", "AppRequests",     "GET /api/users", "500", "GET /api/users", "op-1", "user-1", "", "item-1"),
-                new RawHealthCheckItem("id-2", "2024-01-01T00:01:00Z", "Need.Api",      "/subscriptions/abc", "AppDependencies", "SQL: SELECT",    "0",   "GET /api/jobs",  "op-2", "",       "", "item-2")
+                new RawHealthCheckItem("id-1", "2024-01-01T00:00:00Z", "Candidate.API", "/subscriptions/abc", "AppRequests",     "GET /api/users", "500", "GET /api/users", "op-1", "user-1", "", "item-1", 10, 3),
+                new RawHealthCheckItem("id-2", "2024-01-01T00:01:00Z", "Need.Api",      "/subscriptions/abc", "AppDependencies", "SQL: SELECT",    "0",   "GET /api/jobs",  "op-2", "",       "", "item-2", 5,  1)
             ]);
 
         var response = await _client.GetAsync("/insight/health");
@@ -252,7 +252,7 @@ public class InsightControllerTests : IClassFixture<IntegrationTestFactory>
         _factory.AppInsightsMock
             .Setup(s => s.GetHealthCheckAsync(It.IsAny<string>(), It.IsAny<List<string>>(), AppTableType.AppExceptions, It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([
-                new RawHealthCheckItem("id-3", "2024-01-01T02:00:00Z", "SMARTX", "/subscriptions/abc", "AppExceptions", "NullReferenceException", "", "POST /api/apply", "op-3", "", "", "item-3")
+                new RawHealthCheckItem("id-3", "2024-01-01T02:00:00Z", "SMARTX", "/subscriptions/abc", "AppExceptions", "NullReferenceException", "", "POST /api/apply", "op-3", "", "", "item-3", 7, 2)
             ]);
 
         var response = await _client.GetAsync("/insight/health?type=AppExceptions");
@@ -285,7 +285,7 @@ public class InsightControllerTests : IClassFixture<IntegrationTestFactory>
         _factory.AppInsightsMock
             .Setup(s => s.GetHealthCheckAsync(It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<AppTableType?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([
-                new RawHealthCheckItem("id-4", "2024-01-01T00:00:00Z", "Candidate.API", "", "AppRequests", "GET /api", "500", "GET /api", "op-4", "", "", "")
+                new RawHealthCheckItem("id-4", "2024-01-01T00:00:00Z", "Candidate.API", "", "AppRequests", "GET /api", "500", "GET /api", "op-4", "", "", "", 1, 0)
             ]);
 
         var response = await _client.GetAsync("/insight/health");

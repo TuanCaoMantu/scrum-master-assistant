@@ -40,5 +40,7 @@ public record HealthCheckItem(
     string UserId,
     string UserAuthenticatedId,
     string ItemId,
+    int    Count,
+    int    AffectedUsers,
     string TransactionUrl
 );

@@ -75,7 +75,7 @@ public class InsightController(
     [HttpGet("health")]
     public async Task<IActionResult> GetHealth(
         [FromQuery] string timeRange = "4h",
-        [FromQuery] string roles = "Candidate.API,Need.Api,JobOffers.API,Candidates-SPA,IMP-SPA,SMARTX",
+        [FromQuery] string roles = "Candidate.API,Candidate.Worker.Service,Need.Api,JobOffers.API,Candidates-SPA,IMP-SPA,SMARTX,InternalJobOffer,JobOffers.Worker.Service,JobOffersV2",
         [FromQuery] AppTableType? type = null,
         [FromQuery] int take = 500,
         CancellationToken ct = default)
@@ -102,6 +102,8 @@ public class InsightController(
             UserId:              r.UserId,
             UserAuthenticatedId: r.UserAuthenticatedId,
             ItemId:              r.ItemId,
+            Count:               r.Count,
+            AffectedUsers:       r.AffectedUsers,
             TransactionUrl:      string.IsNullOrEmpty(r.ItemId) ? "" :
                 BuildTransactionUrl(r.ResourceId, r.ItemId,
                     DateTime.TryParse(r.TimeGenerated, out var ts) ? ts : DateTime.UtcNow,

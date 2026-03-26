@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using System.Threading;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ScrumMaster.API.Data;

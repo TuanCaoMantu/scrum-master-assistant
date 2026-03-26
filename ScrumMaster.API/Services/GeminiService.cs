@@ -2,6 +2,11 @@ using OpenAI.Chat;
 
 namespace ScrumMaster.API.Services;
 
+public interface IGeminiService
+{
+    Task<string> AnalyzeAsync(string prompt, CancellationToken ct = default);
+}
+
 public class GeminiService : IGeminiService
 {
     private readonly ChatClient _client;

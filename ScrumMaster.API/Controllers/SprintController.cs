@@ -3,16 +3,12 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using ScrumMaster.API.Models;
 using ScrumMaster.API.Services;
-using System.ComponentModel.DataAnnotations;
 
 namespace ScrumMaster.API.Controllers;
 
 [ApiController]
 [Route("sprint")]
-public class SprintController(
-    IAzureDevOpsMcpService ado,
-    IGeminiService ai,
-    ILogger<SprintController> logger) : ControllerBase
+public class SprintController(IAzureDevOpsMcpService ado, IGeminiService ai) : ControllerBase
 {
     [HttpGet("tools")]
     public async Task<ActionResult<IEnumerable<string>>> ListTools(CancellationToken ct)
@@ -26,15 +22,15 @@ public class SprintController(
     {
         var sprintDataJson = await ado.GetCurrentSprintItemsAsync(ct: ct);
         using var sprintDoc = JsonDocument.Parse(sprintDataJson);
-        var sprintData      = sprintDoc.RootElement;
-        var sprintName      = sprintData.GetProperty("sprintName").GetString() ?? "Unknown Sprint";
+        var sprintData = sprintDoc.RootElement;
+        var sprintName = sprintData.GetProperty("sprintName").GetString() ?? "Unknown Sprint";
 
         // Parse work items
         var workItems = ParseWorkItems(sprintData);
 
         // Tính toán metrics
-        var totalPoints     = workItems.Sum(w => w.StoryPoints);
-        var donePoints      = workItems
+        var totalPoints = workItems.Sum(w => w.StoryPoints);
+        var donePoints = workItems
             .Where(w => w.Status is "Resolved" or "Closed" or "Done")
             .Sum(w => w.StoryPoints);
         var progressPct = totalPoints > 0
@@ -61,12 +57,12 @@ public class SprintController(
         var analysis = await ai.AnalyzeAsync(prompt, ct);
 
         return Ok(new SprintAnalysis(
-            SprintName      : sprintName,
-            Summary         : analysis,
-            SprintHealth    : health,
-            ProgressPercent : progressPct,
-            Warnings        : warnings,
-            Suggestions     : []
+            SprintName: sprintName,
+            Summary: analysis,
+            SprintHealth: health,
+            ProgressPercent: progressPct,
+            Warnings: warnings,
+            Suggestions: []
         ));
     }
 
@@ -88,7 +84,7 @@ public class SprintController(
 
         foreach (var item in arr.EnumerateArray())
         {
-            var fields     = item.TryGetProperty("fields", out var f) ? f : item;
+            var fields = item.TryGetProperty("fields", out var f) ? f : item;
             var assignedTo = fields.TryGetProperty("System.AssignedTo", out var a)
                 ? (a.ValueKind == JsonValueKind.Object
                     ? a.GetProperty("displayName").GetString()
@@ -96,11 +92,11 @@ public class SprintController(
                 : "Unassigned";
 
             result.Add(new WorkItemSummary(
-                Id          : item.TryGetProperty("id", out var id) ? id.GetInt32() : 0,
-                Title       : fields.TryGetProperty("System.Title", out var t) ? t.GetString() ?? "" : "",
-                Status      : fields.TryGetProperty("System.State", out var s) ? s.GetString() ?? "New" : "New",
-                Owner       : assignedTo,
-                StoryPoints : fields.TryGetProperty("Microsoft.VSTS.Scheduling.StoryPoints", out var sp)
+                Id: item.TryGetProperty("id", out var id) ? id.GetInt32() : 0,
+                Title: fields.TryGetProperty("System.Title", out var t) ? t.GetString() ?? "" : "",
+                Status: fields.TryGetProperty("System.State", out var s) ? s.GetString() ?? "New" : "New",
+                Owner: assignedTo,
+                StoryPoints: fields.TryGetProperty("Microsoft.VSTS.Scheduling.StoryPoints", out var sp)
                     ? sp.ValueKind == JsonValueKind.Number ? sp.GetDouble() : 0 : 0,
                 WorkItemType: fields.TryGetProperty("System.WorkItemType", out var wt) ? wt.GetString() ?? "" : ""
             ));

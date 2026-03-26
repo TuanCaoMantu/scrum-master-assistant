@@ -208,4 +208,106 @@ public class InsightControllerTests : IClassFixture<IntegrationTestFactory>
         Assert.Contains("API.Three", capturedRoles);
     }
 
+    // ── Health Check ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetHealth_NoType_ReturnsAllItems()
+    {
+        _factory.AppInsightsMock
+            .Setup(s => s.GetHealthCheckAsync(It.IsAny<string>(), It.IsAny<List<string>>(), null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new RawHealthCheckItem("id-1", "2024-01-01T00:00:00Z", "Candidate.API", "/subscriptions/abc", "AppRequests",     "GET /api/users", "500", "GET /api/users", "op-1", "user-1", "", "item-1"),
+                new RawHealthCheckItem("id-2", "2024-01-01T00:01:00Z", "Need.Api",      "/subscriptions/abc", "AppDependencies", "SQL: SELECT",    "0",   "GET /api/jobs",  "op-2", "",       "", "item-2")
+            ]);
+
+        var response = await _client.GetAsync("/insight/health");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var items = await response.Content.ReadFromJsonAsync<List<HealthCheckItem>>();
+        Assert.NotNull(items);
+        Assert.Equal(2, items.Count);
+        Assert.Equal("AppRequests",     items[0].Type);
+        Assert.Equal("AppDependencies", items[1].Type);
+        Assert.Contains("portal.azure.com", items[0].TransactionUrl);
+        Assert.Contains("portal.azure.com", items[1].TransactionUrl);
+    }
+
+    [Fact]
+    public async Task GetHealth_WithType_PassesTypeToService()
+    {
+        AppTableType? capturedType = null;
+        _factory.AppInsightsMock
+            .Setup(s => s.GetHealthCheckAsync(It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<AppTableType?>(), It.IsAny<CancellationToken>()))
+            .Callback<string, List<string>, AppTableType?, CancellationToken>((_, _, t, _) => capturedType = t)
+            .ReturnsAsync([]);
+
+        await _client.GetAsync("/insight/health?type=AppDependencies");
+
+        Assert.Equal(AppTableType.AppDependencies, capturedType);
+    }
+
+    [Fact]
+    public async Task GetHealth_WithType_ReturnsFilteredItems()
+    {
+        _factory.AppInsightsMock
+            .Setup(s => s.GetHealthCheckAsync(It.IsAny<string>(), It.IsAny<List<string>>(), AppTableType.AppExceptions, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new RawHealthCheckItem("id-3", "2024-01-01T02:00:00Z", "SMARTX", "/subscriptions/abc", "AppExceptions", "NullReferenceException", "", "POST /api/apply", "op-3", "", "", "item-3")
+            ]);
+
+        var response = await _client.GetAsync("/insight/health?type=AppExceptions");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var items = await response.Content.ReadFromJsonAsync<List<HealthCheckItem>>();
+        Assert.NotNull(items);
+        Assert.Single(items);
+        Assert.Equal("AppExceptions",          items[0].Type);
+        Assert.Equal("NullReferenceException", items[0].Name);
+    }
+
+    [Fact]
+    public async Task GetHealth_DefaultTimeRange_IsThreeHours()
+    {
+        string? capturedTimespan = null;
+        _factory.AppInsightsMock
+            .Setup(s => s.GetHealthCheckAsync(It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<AppTableType?>(), It.IsAny<CancellationToken>()))
+            .Callback<string, List<string>, AppTableType?, CancellationToken>((ts, _, _, _) => capturedTimespan = ts)
+            .ReturnsAsync([]);
+
+        await _client.GetAsync("/insight/health");
+
+        Assert.Equal("3h", capturedTimespan);
+    }
+
+    [Fact]
+    public async Task GetHealth_EmptyItemId_ProducesEmptyTransactionUrl()
+    {
+        _factory.AppInsightsMock
+            .Setup(s => s.GetHealthCheckAsync(It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<AppTableType?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new RawHealthCheckItem("id-4", "2024-01-01T00:00:00Z", "Candidate.API", "", "AppRequests", "GET /api", "500", "GET /api", "op-4", "", "", "")
+            ]);
+
+        var response = await _client.GetAsync("/insight/health");
+        var items = await response.Content.ReadFromJsonAsync<List<HealthCheckItem>>();
+
+        Assert.NotNull(items);
+        Assert.Single(items);
+        Assert.Equal("", items[0].TransactionUrl);
+    }
+
+    [Fact]
+    public async Task GetHealth_KqlError_Returns200WithEmptyList()
+    {
+        _factory.AppInsightsMock
+            .Setup(s => s.GetHealthCheckAsync(It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<AppTableType?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new RequestFailedException(400, "Bad KQL"));
+
+        var response = await _client.GetAsync("/insight/health");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var items = await response.Content.ReadFromJsonAsync<List<HealthCheckItem>>();
+        Assert.NotNull(items);
+        Assert.Empty(items);
+    }
 }

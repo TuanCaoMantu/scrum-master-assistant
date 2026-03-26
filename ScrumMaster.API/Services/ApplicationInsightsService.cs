@@ -9,6 +9,7 @@ public interface IApplicationInsightsService
     Task<List<RawFailedRequest>> GetFailedRequestsAsync(string timespan, List<string> roles, CancellationToken ct = default);
     Task<List<RawFailedDependency>> GetFailedDependenciesAsync(string timespan, List<string> roles, CancellationToken ct = default);
     Task<List<RawException>> GetExceptionsAsync(string timespan, List<string> roles, CancellationToken ct = default);
+    Task<List<RawHealthCheckItem>> GetHealthCheckAsync(string timespan, List<string> roles, AppTableType? type = null, int take = 500, CancellationToken ct = default);
 }
 
 public class ApplicationInsightsService : IApplicationInsightsService
@@ -138,6 +139,52 @@ public class ApplicationInsightsService : IApplicationInsightsService
         ));
     }
 
+    public async Task<List<RawHealthCheckItem>> GetHealthCheckAsync(
+        string timespan, List<string> roles, AppTableType? type = null, int take = 500, CancellationToken ct = default)
+    {
+        var roleFilter = BuildRoleFilter(roles);
+        var ago = ValidateAgo(timespan);
+        var typeFilter = type.HasValue ? $"| where Type == \"{type.Value}\"" : "| where Type in (\"AppRequests\", \"AppDependencies\", \"AppExceptions\")";
+        var query = $"""
+        union AppRequests, AppDependencies, AppExceptions
+        | where TimeGenerated > ago({ago})
+        {roleFilter}
+        | where Success == false
+        {typeFilter}
+        | project
+            Id,
+            TimeGenerated,
+            AppRoleName,
+            ResourceId = _ResourceId,
+            Type,
+            Name,
+            ResultCode = tostring(ResultCode),
+            OperationName,
+            OperationId,
+            UserId,
+            UserAuthenticatedId,
+            ItemId = tostring(_ItemId)
+        | order by TimeGenerated desc
+        | take {take}
+        """;
+
+        var rows = await ExecuteQueryAsync(query, timespan, ct);
+        return rows.ConvertAll(r => new RawHealthCheckItem(
+            Id:                  GetStr(r, "Id"),
+            TimeGenerated:       GetStr(r, "TimeGenerated"),
+            AppRoleName:         GetStr(r, "AppRoleName"),
+            ResourceId:          GetStr(r, "ResourceId"),
+            Type:                GetStr(r, "Type"),
+            Name:                GetStr(r, "Name"),
+            ResultCode:          GetStr(r, "ResultCode"),
+            OperationName:       GetStr(r, "OperationName"),
+            OperationId:         GetStr(r, "OperationId"),
+            UserId:              GetStr(r, "UserId"),
+            UserAuthenticatedId: GetStr(r, "UserAuthenticatedId"),
+            ItemId:              GetStr(r, "ItemId")
+        ));
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
     private async Task<List<LogsTableRow>> ExecuteQueryAsync(
         string query, string timespan, CancellationToken ct)
@@ -230,10 +277,18 @@ public class ApplicationInsightsService : IApplicationInsightsService
 public record RawFailedRequest(string Operation, int TotalCount, int FailedCount, double FailPct, string EventId, int Users, string LastFailedTime);
 public record RawFailedDependency(string Name, string DependencyType, int TotalCount, int FailedCount, double AvgDurationMs, string EventId, string LastFailedTime);
 public record RawException(string ExceptionType, string OuterMessage, string ProblemId, int Count, int AffectedUsers, string EventId, string LastFailedTime);
+public record RawHealthCheckItem(string Id, string TimeGenerated, string AppRoleName, string ResourceId, string Type, string Name, string ResultCode, string OperationName, string OperationId, string UserId, string UserAuthenticatedId, string ItemId);
 
 public enum ReportType
 {
     FailedRequests,
     FailedDependencies,
     Exceptions
+}
+
+public enum AppTableType
+{
+    AppRequests,
+    AppDependencies,
+    AppExceptions
 }

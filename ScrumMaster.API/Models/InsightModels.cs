@@ -26,3 +26,19 @@ public record ExceptionItem(
     int    AffectedUsers,
     string RootCause
 );
+
+public record HealthCheckItem(
+    string Id,
+    string TimeGenerated,
+    string AppRoleName,
+    string ResourceId,
+    string Type,
+    string Name,
+    string ResultCode,
+    string OperationName,
+    string OperationId,
+    string UserId,
+    string UserAuthenticatedId,
+    string ItemId,
+    string TransactionUrl
+);

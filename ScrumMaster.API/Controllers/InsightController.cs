@@ -41,7 +41,7 @@ public class InsightController(
                     FailedCount: r.FailedCount,
                     FailPct: r.FailPct,
                     Users: r.Users,
-                    RootCause: BuildTransactionUrl(SubscriptionId, ResourceGroup, AppInsightsName, r.EventId, DateTime.Parse(r.LastFailedTime))
+                    RootCause: BuildTransactionUrl(SubscriptionId, ResourceGroup, AppInsightsName, r.EventId, DateTime.Parse(r.LastFailedTime), "requests")
                 )));
 
             case ReportType.FailedDependencies:
@@ -52,7 +52,7 @@ public class InsightController(
                     TotalCount: r.TotalCount,
                     FailedCount: r.FailedCount,
                     AvgDurationMs: r.AvgDurationMs,
-                    RootCause: BuildTransactionUrl(SubscriptionId, ResourceGroup, AppInsightsName, r.EventId, DateTime.Parse(r.LastFailedTime))
+                    RootCause: BuildTransactionUrl(SubscriptionId, ResourceGroup, AppInsightsName, r.EventId, DateTime.Parse(r.LastFailedTime), "dependencies")
                 )));
 
             case ReportType.Exceptions:
@@ -63,12 +63,50 @@ public class InsightController(
                     ProblemId: r.ProblemId,
                     Count: r.Count,
                     AffectedUsers: r.AffectedUsers,
-                    RootCause: BuildTransactionUrl(SubscriptionId, ResourceGroup, AppInsightsName, r.EventId, DateTime.Parse(r.LastFailedTime))
+                    RootCause: BuildTransactionUrl(SubscriptionId, ResourceGroup, AppInsightsName, r.EventId, DateTime.Parse(r.LastFailedTime), "exceptions")
                 )));
 
             default:
                 return BadRequest("Invalid report type.");
         }
+    }
+
+    // GET /insight/health?timeRange=3h&roles=Candidate.API,Need.Api&type=AppDependencies
+    [HttpGet("health")]
+    public async Task<IActionResult> GetHealth(
+        [FromQuery] string timeRange = "4h",
+        [FromQuery] string roles = "Candidate.API,Need.Api,JobOffers.API,Candidates-SPA,IMP-SPA,SMARTX",
+        [FromQuery] AppTableType? type = null,
+        [FromQuery] int take = 500,
+        CancellationToken ct = default)
+    {
+        var roleList = string.IsNullOrWhiteSpace(roles)
+            ? []
+            : roles.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+        logger.LogInformation("Health check: timeRange={TimeRange}, roles=[{Roles}], type={Type}",
+            timeRange, string.Join(",", roleList), type?.ToString() ?? "all");
+
+        var items = await SafeFetch(() => appInsights.GetHealthCheckAsync(timeRange, roleList, type, take, ct), "health check");
+        
+        return Ok(items.Select(r => new HealthCheckItem(
+            Id:                  r.Id,
+            TimeGenerated:       r.TimeGenerated,
+            AppRoleName:         r.AppRoleName,
+            ResourceId:          r.ResourceId,
+            Type:                r.Type,
+            Name:                r.Name,
+            ResultCode:          r.ResultCode,
+            OperationName:       r.OperationName,
+            OperationId:         r.OperationId,
+            UserId:              r.UserId,
+            UserAuthenticatedId: r.UserAuthenticatedId,
+            ItemId:              r.ItemId,
+            TransactionUrl:      string.IsNullOrEmpty(r.ItemId) ? "" :
+                BuildTransactionUrl(SubscriptionId, ResourceGroup, AppInsightsName, r.ItemId,
+                    DateTime.TryParse(r.TimeGenerated, out var ts) ? ts : DateTime.UtcNow,
+                    ToEventTable(r.Type))
+        )));
     }
 
     // ── Safe fetch ────────────────────────────────────────────────────────────
@@ -89,7 +127,17 @@ public class InsightController(
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
-    private static string BuildTransactionUrl(string subscriptionId, string resourceGroup, string appInsightsName, string eventId, DateTime timestamp)
+
+    // Maps the KQL table name (as returned in the Type column of a union) to the
+    // portal's eventTable identifier used in the DetailsV2Blade deep-link.
+    private static string ToEventTable(string appTableType) => appTableType switch
+    {
+        "AppDependencies" => "dependencies",
+        "AppExceptions"   => "exceptions",
+        _                 => "requests"
+    };
+
+    private static string BuildTransactionUrl(string subscriptionId, string resourceGroup, string appInsightsName, string eventId, DateTime timestamp, string eventTable = "requests")
     {
         var resourceId = $"/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Insights/components/{appInsightsName}";
 
@@ -108,7 +156,7 @@ public class InsightController(
         {
             eventId,
             timestamp = timestamp.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-            eventTable = "requests"
+            eventTable
         });
 
         return $"https://portal.azure.com/#view/AppInsightsExtension/DetailsV2Blade/ComponentId~/{Uri.EscapeDataString(componentId)}/DataModel~/{Uri.EscapeDataString(dataModel)}";

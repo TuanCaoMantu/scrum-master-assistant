@@ -12,7 +12,7 @@ public interface IApplicationInsightsService
     Task<List<RawHealthCheckItem>> GetHealthCheckAsync(string timespan, List<string> roles, AppTableType? type = null, int take = 500, CancellationToken ct = default);
 }
 
-public partial class ApplicationInsightsService : IApplicationInsightsService
+public class ApplicationInsightsService : IApplicationInsightsService
 {
     private readonly LogsQueryClient _client;
     private readonly string _workspaceId;
@@ -238,14 +238,14 @@ public partial class ApplicationInsightsService : IApplicationInsightsService
         timespan is "30m" or "1h" or "4h" or "6h" or "12h" or "24h" or "3d" or "7d" or "30d"
             ? timespan : "24h";
 
-    [System.Text.RegularExpressions.GeneratedRegex(@"^[A-Za-z0-9._\-]+$")]
-    private static partial System.Text.RegularExpressions.Regex RoleNameRegex();
+    private static readonly System.Text.RegularExpressions.Regex RoleNameRegex =
+        new(@"^[A-Za-z0-9._\-]+$", System.Text.RegularExpressions.RegexOptions.Compiled);
 
     private static string BuildRoleFilter(List<string> roles)
     {
         if (roles.Count == 0) return "";
         var validRoles = roles
-            .Where(r => RoleNameRegex().IsMatch(r))
+            .Where(r => RoleNameRegex.IsMatch(r))
             .ToList();
         if (validRoles.Count == 0) return "";
         var list = string.Join(", ", validRoles.Select(r => $"\"{r}\""));

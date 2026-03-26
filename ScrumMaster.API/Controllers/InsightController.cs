@@ -10,11 +10,12 @@ namespace ScrumMaster.API.Controllers;
 [Route("insight")]
 public class InsightController(
     IApplicationInsightsService appInsights,
+    IConfiguration config,
     ILogger<InsightController> logger) : ControllerBase
 {
-    private const string SubscriptionId   = "3e45e1dd-7bc1-4750-85fc-1827620be83a";
-    private const string ResourceGroup    = "rg-erp";
-    private const string AppInsightsName  = "appi-marketplace-prod";
+    private readonly string _subscriptionId  = config["ApplicationInsights:SubscriptionId"]  ?? "";
+    private readonly string _resourceGroup   = config["ApplicationInsights:ResourceGroup"]   ?? "";
+    private readonly string _appInsightsName = config["ApplicationInsights:AppInsightsName"] ?? "";
 
     // GET /insight/report?timeRange=24h&roles=Candidate.API,Need.Api
     [HttpGet("report")]
@@ -41,7 +42,7 @@ public class InsightController(
                     FailedCount: r.FailedCount,
                     FailPct: r.FailPct,
                     Users: r.Users,
-                    RootCause: BuildTransactionUrl(BuildResourceId(SubscriptionId, ResourceGroup, AppInsightsName), r.EventId, DateTime.Parse(r.LastFailedTime), "requests")
+                    RootCause: BuildTransactionUrl(BuildResourceId(_subscriptionId, _resourceGroup, _appInsightsName), r.EventId, ParseTimestamp(r.LastFailedTime), "requests")
                 )));
 
             case ReportType.FailedDependencies:
@@ -52,7 +53,7 @@ public class InsightController(
                     TotalCount: r.TotalCount,
                     FailedCount: r.FailedCount,
                     AvgDurationMs: r.AvgDurationMs,
-                    RootCause: BuildTransactionUrl(BuildResourceId(SubscriptionId, ResourceGroup, AppInsightsName), r.EventId, DateTime.Parse(r.LastFailedTime), "dependencies")
+                    RootCause: BuildTransactionUrl(BuildResourceId(_subscriptionId, _resourceGroup, _appInsightsName), r.EventId, ParseTimestamp(r.LastFailedTime), "dependencies")
                 )));
 
             case ReportType.Exceptions:
@@ -63,7 +64,7 @@ public class InsightController(
                     ProblemId: r.ProblemId,
                     Count: r.Count,
                     AffectedUsers: r.AffectedUsers,
-                    RootCause: BuildTransactionUrl(BuildResourceId(SubscriptionId, ResourceGroup, AppInsightsName), r.EventId, DateTime.Parse(r.LastFailedTime), "exceptions")
+                    RootCause: BuildTransactionUrl(BuildResourceId(_subscriptionId, _resourceGroup, _appInsightsName), r.EventId, ParseTimestamp(r.LastFailedTime), "exceptions")
                 )));
 
             default:
@@ -71,7 +72,7 @@ public class InsightController(
         }
     }
 
-    // GET /insight/health?timeRange=3h&roles=Candidate.API,Need.Api&type=AppDependencies
+    // GET /insight/health?timeRange=4h&roles=Candidate.API,Need.Api&type=AppDependencies
     [HttpGet("health")]
     public async Task<IActionResult> GetHealth(
         [FromQuery] string timeRange = "4h",
@@ -106,7 +107,7 @@ public class InsightController(
             AffectedUsers:       r.AffectedUsers,
             TransactionUrl:      string.IsNullOrEmpty(r.ItemId) ? "" :
                 BuildTransactionUrl(r.ResourceId, r.ItemId,
-                    DateTime.TryParse(r.TimeGenerated, out var ts) ? ts : DateTime.UtcNow,
+                    ParseTimestamp(r.TimeGenerated),
                     ToEventTable(r.Type))
         )));
     }
@@ -133,8 +134,8 @@ public class InsightController(
     // Parses an Azure resource ID of the form:
     // /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Insights/components/{name}
     // Returns the three components needed for BuildTransactionUrl, or falls back to the
-    // hardcoded constants when the resource ID is absent or malformed.
-    private static (string Sub, string Rg, string Name) ParseResourceId(string resourceId)
+    // configured values when the resource ID is absent or malformed.
+    private (string Sub, string Rg, string Name) ParseResourceId(string resourceId)
     {
         var parts = resourceId.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length >= 8
@@ -144,11 +145,15 @@ public class InsightController(
         {
             return (parts[1], parts[3], parts[7]);
         }
-        return (SubscriptionId, ResourceGroup, AppInsightsName);
+        return (_subscriptionId, _resourceGroup, _appInsightsName);
     }
 
     private static string BuildResourceId(string subscriptionId, string resourceGroup, string appInsightsName) =>
         $"/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Insights/components/{appInsightsName}";
+
+    private static DateTime ParseTimestamp(string value) =>
+        DateTime.TryParse(value, null, System.Globalization.DateTimeStyles.RoundtripKind, out var dt)
+            ? dt : DateTime.UtcNow;
 
     // Maps the KQL table name (as returned in the Type column of a union) to the
     // portal's eventTable identifier used in the DetailsV2Blade deep-link.
@@ -159,7 +164,7 @@ public class InsightController(
         _                 => "requests"
     };
 
-    private static string BuildTransactionUrl(string resource, string eventId, DateTime timestamp, string eventTable = "requests")
+    private string BuildTransactionUrl(string resource, string eventId, DateTime timestamp, string eventTable = "requests")
     {
         var (subscriptionId, resourceGroup, appInsightsName) = ParseResourceId(resource);
 

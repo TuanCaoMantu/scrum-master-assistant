@@ -27,7 +27,7 @@ ASP.NET Core Web API that acts as an AI-powered Scrum management assistant, inte
 - Register all services in `Program.cs` via DI; never instantiate services directly
 - Use service interfaces (`IGeminiService`, `IAzureDevOpsMcpService`, `IApplicationInsightsService`) — required for testability
 - Standup submissions use file-based JSON storage with `SemaphoreSlim` mutex — do not replace with DB without discussion
-- Secrets (API keys, PAT tokens, workspace IDs) go in `appsettings.Development.json` only — never in `appsettings.json`
+- Secret *values* (API keys, PAT tokens, workspace IDs) must never be committed to source control: `appsettings.json` may define keys/placeholders with empty defaults, but real values must come from environment variables, user-secrets, or a git-ignored `appsettings.Development.json`
 
 ## Commands
 - `dotnet run --project ScrumMaster.API` — start API (defaults to `http://localhost:5046`)
@@ -44,7 +44,7 @@ ASP.NET Core Web API that acts as an AI-powered Scrum management assistant, inte
 ## Important Rules
 - NEVER commit `appsettings.Development.json` — it contains secrets
 - NEVER call Azure services directly from controllers — always go through a service interface
-- EF migrations are auto-applied at startup via `db.Database.MigrateAsync()` in `Program.cs`; do not call `EnsureCreated`
+- EF migrations are auto-applied at startup via `db.Database.Migrate()` in `Program.cs`; do not call `EnsureCreated`
 - Blocker auto-escalation logic lives in `BlockerController` — escalation triggers after 2+ follow-ups; preserve this behaviour when modifying
 - The `GeminiService` strips markdown code fences from AI responses — keep this when extending AI calls
 

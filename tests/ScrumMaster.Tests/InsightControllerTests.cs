@@ -15,6 +15,7 @@ public class InsightControllerTests : IClassFixture<IntegrationTestFactory>
     public InsightControllerTests(IntegrationTestFactory factory)
     {
         _factory = factory;
+        _factory.AppInsightsMock.Reset();
         _client  = factory.CreateClient();
     }
 
@@ -266,7 +267,7 @@ public class InsightControllerTests : IClassFixture<IntegrationTestFactory>
     }
 
     [Fact]
-    public async Task GetHealth_DefaultTimeRange_IsThreeHours()
+    public async Task GetHealth_DefaultTimeRange_IsFourHours()
     {
         string? capturedTimespan = null;
         _factory.AppInsightsMock

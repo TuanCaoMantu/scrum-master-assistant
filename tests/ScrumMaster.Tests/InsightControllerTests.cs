@@ -214,7 +214,7 @@ public class InsightControllerTests : IClassFixture<IntegrationTestFactory>
     public async Task GetHealth_NoType_ReturnsAllItems()
     {
         _factory.AppInsightsMock
-            .Setup(s => s.GetHealthCheckAsync(It.IsAny<string>(), It.IsAny<List<string>>(), null, It.IsAny<CancellationToken>()))
+            .Setup(s => s.GetHealthCheckAsync(It.IsAny<string>(), It.IsAny<List<string>>(), null, It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([
                 new RawHealthCheckItem("id-1", "2024-01-01T00:00:00Z", "Candidate.API", "/subscriptions/abc", "AppRequests",     "GET /api/users", "500", "GET /api/users", "op-1", "user-1", "", "item-1"),
                 new RawHealthCheckItem("id-2", "2024-01-01T00:01:00Z", "Need.Api",      "/subscriptions/abc", "AppDependencies", "SQL: SELECT",    "0",   "GET /api/jobs",  "op-2", "",       "", "item-2")
@@ -237,8 +237,8 @@ public class InsightControllerTests : IClassFixture<IntegrationTestFactory>
     {
         AppTableType? capturedType = null;
         _factory.AppInsightsMock
-            .Setup(s => s.GetHealthCheckAsync(It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<AppTableType?>(), It.IsAny<CancellationToken>()))
-            .Callback<string, List<string>, AppTableType?, CancellationToken>((_, _, t, _) => capturedType = t)
+            .Setup(s => s.GetHealthCheckAsync(It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<AppTableType?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Callback<string, List<string>, AppTableType?, int, CancellationToken>((_, _, t, _, _) => capturedType = t)
             .ReturnsAsync([]);
 
         await _client.GetAsync("/insight/health?type=AppDependencies");
@@ -250,7 +250,7 @@ public class InsightControllerTests : IClassFixture<IntegrationTestFactory>
     public async Task GetHealth_WithType_ReturnsFilteredItems()
     {
         _factory.AppInsightsMock
-            .Setup(s => s.GetHealthCheckAsync(It.IsAny<string>(), It.IsAny<List<string>>(), AppTableType.AppExceptions, It.IsAny<CancellationToken>()))
+            .Setup(s => s.GetHealthCheckAsync(It.IsAny<string>(), It.IsAny<List<string>>(), AppTableType.AppExceptions, It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([
                 new RawHealthCheckItem("id-3", "2024-01-01T02:00:00Z", "SMARTX", "/subscriptions/abc", "AppExceptions", "NullReferenceException", "", "POST /api/apply", "op-3", "", "", "item-3")
             ]);
@@ -270,20 +270,20 @@ public class InsightControllerTests : IClassFixture<IntegrationTestFactory>
     {
         string? capturedTimespan = null;
         _factory.AppInsightsMock
-            .Setup(s => s.GetHealthCheckAsync(It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<AppTableType?>(), It.IsAny<CancellationToken>()))
-            .Callback<string, List<string>, AppTableType?, CancellationToken>((ts, _, _, _) => capturedTimespan = ts)
+            .Setup(s => s.GetHealthCheckAsync(It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<AppTableType?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Callback<string, List<string>, AppTableType?, int, CancellationToken>((ts, _, _, _, _) => capturedTimespan = ts)
             .ReturnsAsync([]);
 
         await _client.GetAsync("/insight/health");
 
-        Assert.Equal("3h", capturedTimespan);
+        Assert.Equal("4h", capturedTimespan);
     }
 
     [Fact]
     public async Task GetHealth_EmptyItemId_ProducesEmptyTransactionUrl()
     {
         _factory.AppInsightsMock
-            .Setup(s => s.GetHealthCheckAsync(It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<AppTableType?>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.GetHealthCheckAsync(It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<AppTableType?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([
                 new RawHealthCheckItem("id-4", "2024-01-01T00:00:00Z", "Candidate.API", "", "AppRequests", "GET /api", "500", "GET /api", "op-4", "", "", "")
             ]);
@@ -300,7 +300,7 @@ public class InsightControllerTests : IClassFixture<IntegrationTestFactory>
     public async Task GetHealth_KqlError_Returns200WithEmptyList()
     {
         _factory.AppInsightsMock
-            .Setup(s => s.GetHealthCheckAsync(It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<AppTableType?>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.GetHealthCheckAsync(It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<AppTableType?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new RequestFailedException(400, "Bad KQL"));
 
         var response = await _client.GetAsync("/insight/health");

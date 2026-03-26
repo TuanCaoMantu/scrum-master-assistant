@@ -41,7 +41,7 @@ public class InsightController(
                     FailedCount: r.FailedCount,
                     FailPct: r.FailPct,
                     Users: r.Users,
-                    RootCause: BuildTransactionUrl(SubscriptionId, ResourceGroup, AppInsightsName, r.EventId, DateTime.Parse(r.LastFailedTime), "requests")
+                    RootCause: BuildTransactionUrl(BuildResourceId(SubscriptionId, ResourceGroup, AppInsightsName), r.EventId, DateTime.Parse(r.LastFailedTime), "requests")
                 )));
 
             case ReportType.FailedDependencies:
@@ -52,7 +52,7 @@ public class InsightController(
                     TotalCount: r.TotalCount,
                     FailedCount: r.FailedCount,
                     AvgDurationMs: r.AvgDurationMs,
-                    RootCause: BuildTransactionUrl(SubscriptionId, ResourceGroup, AppInsightsName, r.EventId, DateTime.Parse(r.LastFailedTime), "dependencies")
+                    RootCause: BuildTransactionUrl(BuildResourceId(SubscriptionId, ResourceGroup, AppInsightsName), r.EventId, DateTime.Parse(r.LastFailedTime), "dependencies")
                 )));
 
             case ReportType.Exceptions:
@@ -63,7 +63,7 @@ public class InsightController(
                     ProblemId: r.ProblemId,
                     Count: r.Count,
                     AffectedUsers: r.AffectedUsers,
-                    RootCause: BuildTransactionUrl(SubscriptionId, ResourceGroup, AppInsightsName, r.EventId, DateTime.Parse(r.LastFailedTime), "exceptions")
+                    RootCause: BuildTransactionUrl(BuildResourceId(SubscriptionId, ResourceGroup, AppInsightsName), r.EventId, DateTime.Parse(r.LastFailedTime), "exceptions")
                 )));
 
             default:
@@ -103,7 +103,7 @@ public class InsightController(
             UserAuthenticatedId: r.UserAuthenticatedId,
             ItemId:              r.ItemId,
             TransactionUrl:      string.IsNullOrEmpty(r.ItemId) ? "" :
-                BuildTransactionUrl(SubscriptionId, ResourceGroup, AppInsightsName, r.ItemId,
+                BuildTransactionUrl(r.ResourceId, r.ItemId,
                     DateTime.TryParse(r.TimeGenerated, out var ts) ? ts : DateTime.UtcNow,
                     ToEventTable(r.Type))
         )));
@@ -128,6 +128,26 @@ public class InsightController(
 
     // ── Helpers ────────────────────────────────────────────────────────────────
 
+    // Parses an Azure resource ID of the form:
+    // /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Insights/components/{name}
+    // Returns the three components needed for BuildTransactionUrl, or falls back to the
+    // hardcoded constants when the resource ID is absent or malformed.
+    private static (string Sub, string Rg, string Name) ParseResourceId(string resourceId)
+    {
+        var parts = resourceId.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 8
+            && parts[0].Equals("subscriptions",  StringComparison.OrdinalIgnoreCase)
+            && parts[2].Equals("resourceGroups", StringComparison.OrdinalIgnoreCase)
+            && parts[6].Equals("components",     StringComparison.OrdinalIgnoreCase))
+        {
+            return (parts[1], parts[3], parts[7]);
+        }
+        return (SubscriptionId, ResourceGroup, AppInsightsName);
+    }
+
+    private static string BuildResourceId(string subscriptionId, string resourceGroup, string appInsightsName) =>
+        $"/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Insights/components/{appInsightsName}";
+
     // Maps the KQL table name (as returned in the Type column of a union) to the
     // portal's eventTable identifier used in the DetailsV2Blade deep-link.
     private static string ToEventTable(string appTableType) => appTableType switch
@@ -137,9 +157,9 @@ public class InsightController(
         _                 => "requests"
     };
 
-    private static string BuildTransactionUrl(string subscriptionId, string resourceGroup, string appInsightsName, string eventId, DateTime timestamp, string eventTable = "requests")
+    private static string BuildTransactionUrl(string resource, string eventId, DateTime timestamp, string eventTable = "requests")
     {
-        var resourceId = $"/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.Insights/components/{appInsightsName}";
+        var (subscriptionId, resourceGroup, appInsightsName) = ParseResourceId(resource);
 
         var componentId = JsonSerializer.Serialize(new
         {
@@ -147,7 +167,7 @@ public class InsightController(
             ResourceGroup = resourceGroup,
             Name = appInsightsName,
             LinkedApplicationType = 0,
-            ResourceId = Uri.EscapeDataString(resourceId),
+            ResourceId = Uri.EscapeDataString(resource),
             ResourceType = "microsoft.insights/components",
             IsAzureFirst = false
         });
